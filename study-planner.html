@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f5f0e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="学習計画">
+<link rel="manifest" id="manifestLink">
+<title>学習計画表</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Lora:wght@500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f0e8;--surface:#fffdf8;--surface2:#f0ead8;
+  --border:#ddd3bc;--border2:#c9bda5;
+  --accent:#7a5c38;--accent2:#a0784e;--accent3:#c49a6c;
+  --text:#2e2010;--text2:#6b5540;--text3:#a8917a;
+  --easy:#3a7d5e;--med:#b07a20;--hard:#b03a2e;
+  --done:#3a7d5e;--warn:#c0511a;--tag-bg:#e8dfc8;--co:#c0511a;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;
+  padding:calc(16px + var(--safe-top)) 16px calc(72px + var(--safe-bot))}
+h1{font-family:'Lora',serif;font-size:1.5rem;font-weight:700;color:var(--accent);margin-bottom:2px}
+.subtitle{font-size:.74rem;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+
+/* PWA install banner */
+#pwaBar{display:none;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.8rem;color:var(--text2)}
+#pwaBar.show{display:flex}
+
+.banner{border-radius:10px;padding:9px 14px;margin-bottom:12px;font-size:.82rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.banner.hidden{display:none}
+.banner.urgent{background:#fdecea;border:1px solid #e8a09a;color:var(--hard)}
+.banner.soon{background:#fdf3e0;border:1px solid #e0c070;color:var(--med)}
+.banner.normal{background:#eee8da;border:1px solid var(--border);color:var(--accent)}
+.banner.co{background:#fff4ec;border:1px solid #f0b080;color:var(--co)}
+.banner-label{font-weight:700}
+.banner-days{font-family:'Lora',serif;font-size:1.05rem;font-weight:700}
+
+.tabs{display:flex;gap:3px;background:var(--surface2);border-radius:10px;padding:4px;margin-bottom:18px;border:1px solid var(--border)}
+.tab{flex:1;padding:7px 3px;border:none;border-radius:7px;background:transparent;color:var(--text2);font-family:'Noto Sans JP',sans-serif;font-size:.74rem;cursor:pointer;transition:all .2s}
+.tab.active{background:var(--accent);color:#fff;font-weight:500}
+.panel{display:none}.panel.active{display:block}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(100,70,30,.06)}
+.card-title{font-size:.7rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent2);margin-bottom:12px}
+
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=text],input[type=number],input[type=date],select{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+  font-family:'Noto Sans JP',sans-serif;font-size:.85rem;padding:8px 10px;outline:none;transition:border-color .2s;width:100%}
+input:focus,select:focus{border-color:var(--accent);background:var(--surface)}
+select option{background:var(--surface)}
+label{font-size:.77rem;color:var(--text2);white-space:nowrap}
+.field{display:flex;flex-direction:column;gap:4px}
+.field-xs{width:56px;flex-shrink:0}.field-sm{width:82px;flex-shrink:0}
+.field-md{width:126px;flex-shrink:0}.field-lg{flex:1;min-width:120px}
+
+.btn{border:none;border-radius:8px;font-family:'Noto Sans JP',sans-serif;font-size:.82rem;font-weight:500;cursor:pointer;padding:8px 14px;transition:all .2s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}
+.btn-ghost{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:transparent;color:var(--text3);border:none;font-size:1rem;cursor:pointer;padding:2px 6px}.btn-danger:hover{color:var(--hard)}
+.btn-sm{padding:5px 10px;font-size:.76rem}
+.generate-btn{width:100%;padding:12px;font-size:.9rem;border-radius:10px;margin-top:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:600}
+.generate-btn:hover{opacity:.9}
+.confirm-btn{width:100%;padding:10px;font-size:.85rem;border-radius:10px;margin-top:10px;background:#fff4ec;color:var(--co);border:1.5px solid #f0b080;font-weight:600;cursor:pointer}
+.confirm-btn:hover{background:#fde8d4}
+
+.todo-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.todo-item:last-child{border-bottom:none}
+.todo-check{width:18px;height:18px;border:2px solid var(--border2);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.todo-check.checked{background:var(--done);border-color:var(--done)}.todo-check.checked::after{content:'✓';color:#fff;font-size:11px;font-weight:700}
+.todo-text{flex:1;font-size:.85rem}.todo-text.done{text-decoration:line-through;color:var(--text3)}
+
+.book-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.book-card-header{padding:11px 14px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:background .15s}
+.book-card-header:hover{background:var(--surface2)}
+.book-card-body{padding:12px 14px;border-top:1px solid var(--border);background:var(--surface2)}
+.book-card-body.hidden{display:none}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:600}
+.badge-easy{background:#d4ede3;color:var(--easy)}.badge-med{background:#faecd0;color:var(--med)}.badge-hard{background:#f5dbd9;color:var(--hard)}
+.type-badge-tb{display:inline-block;padding:1px 6px;border-radius:4px;font-size:.63rem;font-weight:700;background:#e8dfc8;color:var(--accent);border:1px solid var(--border2);margin-right:4px}
+.type-badge-wb{display:inline-block;padding:1px 6px;border-radius:4px;font-size:.63rem;font-weight:700;background:#faecd0;color:var(--med);border:1px solid #e0c070;margin-right:4px}
+
+.chap-progress-wrap{margin:6px 0 4px}
+.chap-progress-track{height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+.chap-progress-fill{height:100%;border-radius:4px;transition:width .4s}
+
+.lap-progress{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+.lap-progress-title{font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px}
+.lap-rows{display:flex;flex-direction:column;gap:7px}
+.lap-row{display:flex;align-items:center;gap:10px}
+.lap-row-label{font-size:.76rem;color:var(--text2);width:90px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lap-bar-track{flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
+.lap-bar-fill{height:100%;border-radius:3px;transition:width .4s}
+.lap-row-pct{font-family:'Lora',serif;font-size:.73rem;color:var(--text2);width:34px;text-align:right}
+
+.set-block{border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.plan-item{background:var(--surface);border-bottom:1px solid var(--border);padding:11px 13px;display:flex;align-items:flex-start;gap:11px}
+.plan-item:last-child{border-bottom:none}
+.plan-item.co-hi{background:#fff8f4;border-left:3px solid var(--co)}
+.plan-item.wb-paired{background:#f7f3ec;padding-left:26px}
+.plan-item-left{flex:1}
+.plan-item-name{font-size:.87rem;font-weight:500;margin-bottom:3px;color:var(--text)}
+.plan-item-sub{font-size:.73rem;color:var(--text2)}
+.plan-item-time{font-family:'Lora',serif;font-size:.88rem;font-weight:600;color:var(--accent);white-space:nowrap}
+.plan-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.co-tag{display:inline-block;padding:1px 5px;border-radius:4px;font-size:.63rem;font-weight:700;background:#fff0e8;color:var(--co);border:1px solid #f0b080;margin-left:5px;vertical-align:middle}
+.chap-range-tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:.7rem;font-weight:600;background:var(--tag-bg);color:var(--accent);margin-right:4px}
+
+.empty-state{text-align:center;padding:36px 20px;color:var(--text3);font-size:.83rem;line-height:1.8}
+.summary-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.summary-chip{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:.75rem;color:var(--text2)}
+.summary-chip span{font-family:'Lora',serif;font-size:1rem;font-weight:600;color:var(--accent);display:block}
+.summary-chip.co span{color:var(--co)}
+
+.co-list-card{background:#fff8f4;border:1px solid #f0b080;border-radius:12px;padding:14px;margin-bottom:14px}
+.co-list-title{font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--co);margin-bottom:10px}
+.co-list-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0cfc0;font-size:.82rem}
+.co-list-item:last-child{border-bottom:none}
+.co-dismiss{background:transparent;border:none;color:#d09070;cursor:pointer;font-size:.74rem;padding:2px 6px}.co-dismiss:hover{color:var(--hard)}
+.confirm-check-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:.83rem}
+.confirm-check-item:last-child{border-bottom:none}
+
+.settings-grid{display:flex;flex-direction:column;gap:12px}
+.hint{font-size:.72rem;color:var(--text3);margin-top:3px;line-height:1.5}
+.inline-num{width:54px;display:inline-block;padding:2px 6px;font-size:.82rem;border-radius:6px;text-align:center}
+</style>
+</head>
+<body>
+<h1>📚 学習計画表</h1>
+<p class="subtitle">Smart Study Planner</p>
+
+<div id="pwaBar">
+  <span style="flex:1">📱 ホーム画面に追加するとアプリとして使えます</span>
+  <button class="btn btn-primary btn-sm" id="pwaInstallBtn">追加する</button>
+  <button class="btn-danger" onclick="document.getElementById('pwaBar').classList.remove('show')">✕</button>
+</div>
+
+<div id="examBanner" class="banner hidden"></div>
+<div id="coBanner" class="banner hidden"></div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('today')">今日</button>
+  <button class="tab" onclick="switchTab('textbooks')">教科書</button>
+  <button class="tab" onclick="switchTab('workbooks')">問題集</button>
+  <button class="tab" onclick="switchTab('todos')">TODO</button>
+  <button class="tab" onclick="switchTab('settings')">設定</button>
+</div>
+
+<!-- TODAY -->
+<div id="panel-today" class="panel active">
+  <div class="card">
+    <div class="card-title">⚙ 計画の設定</div>
+    <div class="row" style="margin-bottom:10px">
+      <div class="field field-md"><label>今日の学習時間（分）</label><input type="number" id="dailyMinutes" value="120" min="10" max="600" step="10"></div>
+      <div class="field field-md"><label>優先戦略</label>
+        <select id="strategy">
+          <option value="weak">弱点優先</option>
+          <option value="order">登録順</option>
+          <option value="short">短時間優先</option>
+          <option value="exam">試験まで均等割り</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn generate-btn" onclick="generatePlan()">✨ 今日の計画を自動生成</button>
+  </div>
+  <div id="lapProgressArea"></div>
+  <div id="coArea"></div>
+  <div id="planOutput"></div>
+</div>
+
+<!-- TEXTBOOKS -->
+<div id="panel-textbooks" class="panel">
+  <div class="card">
+    <div class="card-title">＋ 教科書を追加</div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="field field-lg"><label>教科書名</label><input type="text" id="tbName" placeholder="例：数学Ⅱ教科書"></div>
+      <div class="field field-md"><label>科目</label><input type="text" id="tbSubject" placeholder="例：数学"></div>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="field field-sm"><label>総章数</label><input type="number" id="tbTotalChaps" value="10" min="1" max="999"></div>
+      <div class="field field-sm"><label>1章あたり(分)</label><input type="number" id="tbTimePerChap" value="40" min="1" max="300"></div>
+      <div class="field field-sm"><label>開始章</label><input type="number" id="tbStartChap" value="1" min="1"></div>
+      <div class="field field-md"><label>紐付ける試験</label><select id="tbExamLink"><option value="">（なし）</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field field-md"><label>難易度</label>
+        <select id="tbDiff"><option value="easy">易しい</option><option value="med" selected>普通</option><option value="hard">難しい</option></select>
+      </div>
+      <div class="field field-sm"><label>目標周回数</label>
+        <select id="tbTargetLaps"><option value="1">1周</option><option value="2" selected>2周</option><option value="3">3周</option><option value="4">4周</option><option value="5">5周</option></select>
+      </div>
+      <button class="btn btn-primary" style="margin-top:20px" onclick="addTextbook()">追加</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📖 登録済みの教科書</div>
+    <div id="textbookList"><div class="empty-state">まだ教科書が登録されていません</div></div>
+  </div>
+</div>
+
+<!-- WORKBOOKS -->
+<div id="panel-workbooks" class="panel">
+  <div class="card">
+    <div class="card-title">＋ 問題集 / 参考書を追加</div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="field field-lg"><label>名前</label><input type="text" id="wbName" placeholder="例：数学重要問題集"></div>
+      <div class="field field-md"><label>科目</label><input type="text" id="wbSubject" placeholder="例：数学"></div>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="field field-sm"><label>総章数</label><input type="number" id="wbTotalChaps" value="30" min="1" max="999"></div>
+      <div class="field field-sm"><label>1章あたり(分)</label><input type="number" id="wbTimePerChap" value="20" min="1" max="180"></div>
+      <div class="field field-sm"><label>開始章</label><input type="number" id="wbStartChap" value="1" min="1"></div>
+      <div class="field field-md"><label>紐付ける試験</label><select id="wbExamLink"><option value="">（なし）</option></select></div>
+      <div class="field field-md"><label>セット教科書</label><select id="wbTbLink"><option value="">（なし）</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field field-md"><label>難易度</label>
+        <select id="wbDiff"><option value="easy">易しい</option><option value="med" selected>普通</option><option value="hard">難しい</option></select>
+      </div>
+      <div class="field field-sm"><label>目標周回数</label>
+        <select id="wbTargetLaps"><option value="1">1周</option><option value="2" selected>2周</option><option value="3">3周</option><option value="4">4周</option><option value="5">5周</option></select>
+      </div>
+      <button class="btn btn-primary" style="margin-top:20px" onclick="addWorkbook()">追加</button>
+    </div>
+    <p class="hint" style="margin-top:8px">「セット教科書」を設定すると計画でその教科書の直後に並びます。</p>
+  </div>
+  <div class="card">
+    <div class="card-title">📝 登録済みの問題集</div>
+    <div id="workbookList"><div class="empty-state">登録されていません</div></div>
+  </div>
+</div>
+
+<!-- TODOS -->
+<div id="panel-todos" class="panel">
+  <div class="card">
+    <div class="card-title">＋ TODOを追加</div>
+    <div class="row">
+      <div class="field field-lg"><label>タスク</label><input type="text" id="todoText" placeholder="例：過去問を解く" onkeydown="if(event.key==='Enter')addTodo()"></div>
+      <div class="field field-sm"><label>時間(分)</label><input type="number" id="todoTime" value="30" min="5" max="300" step="5"></div>
+      <button class="btn btn-primary" style="margin-top:20px" onclick="addTodo()">追加</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">✅ TODOリスト</div>
+    <div id="todoList"><div class="empty-state">TODOはありません</div></div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="panel-settings" class="panel">
+  <div class="card">
+    <div class="card-title">📅 試験日の設定</div>
+    <div class="settings-grid">
+      <div id="examList"></div>
+      <div class="row">
+        <div class="field field-lg"><label>試験名</label><input type="text" id="examName" placeholder="例：数学期末試験"></div>
+        <div class="field field-md"><label>試験日</label><input type="date" id="examDate"></div>
+        <button class="btn btn-primary" style="margin-top:20px" onclick="addExam()">追加</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🔄 周回時間短縮率（全冊共通）</div>
+    <div class="settings-grid">
+      <div class="field">
+        <label>周回ごとの時間短縮率（%）</label>
+        <input type="number" id="lapReduction" value="10" min="0" max="50" step="5" onchange="saveLapSettings()">
+        <span class="hint">例：10 → 2周目は1章あたり時間の90%、3周目は81%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════ PWA ════
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();deferredPrompt=e;
+  document.getElementById('pwaBar').classList.add('show');
+});
+document.getElementById('pwaInstallBtn').addEventListener('click',async()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  const{outcome}=await deferredPrompt.userChoice;
+  deferredPrompt=null;
+  document.getElementById('pwaBar').classList.remove('show');
+});
+
+// inline manifest via blob
+const manifest={
+  name:'学習計画表',short_name:'学習計画',start_url:location.href,
+  display:'standalone',background_color:'#f5f0e8',theme_color:'#7a5c38',
+  icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#7a5c38"/><text y=".9em" font-size="75" x="12">📚</text></svg>'),sizes:'192x192',type:'image/svg+xml'}]
+};
+const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+document.getElementById('manifestLink').href=URL.createObjectURL(mBlob);
+
+// service worker for offline
+if('serviceWorker' in navigator){
+  const swCode=`
+    const CACHE='sp-v1';
+    self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll([self.location.pathname]))));
+    self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
+      const clone=res.clone();
+      caches.open(CACHE).then(c=>c.put(e.request,clone));
+      return res;
+    }))));
+  `;
+  const swBlob=new Blob([swCode],{type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
+}
+
+// ════ STATE ════
+const state={
+  textbooks: JSON.parse(localStorage.getItem('sp3_textbooks')||'[]'),
+  workbooks: JSON.parse(localStorage.getItem('sp3_workbooks')||'[]'),
+  todos:     JSON.parse(localStorage.getItem('sp3_todos')||'[]'),
+  exams:     JSON.parse(localStorage.getItem('sp3_exams')||'[]'),
+  carryovers:JSON.parse(localStorage.getItem('sp3_carryovers')||'[]'),
+  settings:  JSON.parse(localStorage.getItem('sp3_settings')||'{"lapReduction":10}'),
+};
+function save(){
+  ['textbooks','workbooks','todos','exams','carryovers','settings'].forEach(k=>localStorage.setItem('sp3_'+k,JSON.stringify(state[k])));
+}
+
+// ════ HELPERS ════
+function daysUntil(d){const t=new Date();t.setHours(0,0,0,0);return Math.ceil((new Date(d+'T00:00:00')-t)/86400000);}
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function lapReduction(){return state.settings.lapReduction/100;}
+
+// 推奨1日章数 — 残り（全周込み）÷ 残り日数
+function calcRec(book){
+  if(!book.examId) return null;
+  const exam=state.exams.find(e=>e.id===book.examId);
+  if(!exam) return null;
+  const days=Math.max(1,daysUntil(exam.date));
+  const curLap=book.currentLap||1, tgtLap=book.targetLaps||1;
+  const remaining=(book.totalChaps-(book.currentChap-1))+(book.totalChaps*(tgtLap-curLap));
+  return remaining<=0?0:Math.max(1,Math.ceil(remaining/days));
+}
+
+// 今日のタスク（周回短縮を教科書・問題集両方に適用）
+function todayTask(book){
+  const rec=calcRec(book);
+  const perDay=book.chapsPerDayOverride!=null?book.chapsPerDayOverride:(rec||1);
+  const from=book.currentChap||1;
+  const to=Math.min(book.totalChaps,from+perDay-1);
+  const chaps=to-from+1;
+  const lap=book.currentLap||1;
+  const timePerChap=Math.round((book.timePerChap||20)*Math.pow(1-lapReduction(),lap-1));
+  return {from,to,chaps,mins:chaps*timePerChap,timePerChap,lap};
+}
+
+// ════ TAB ════
+function switchTab(id){
+  const ids=['today','textbooks','workbooks','todos','settings'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',ids[i]===id));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  if(id==='today'){renderLapProgress();renderCoArea();}
+  if(id==='settings') renderSettings();
+  if(id==='textbooks'){populateExamSelect('tbExamLink');renderTextbooks();}
+  if(id==='workbooks'){populateExamSelect('wbExamLink');populateTbSelect('wbTbLink');renderWorkbooks();}
+}
+
+// ════ EXAM ════
+function addExam(){
+  const name=document.getElementById('examName').value.trim();
+  const date=document.getElementById('examDate').value;
+  if(!name||!date)return;
+  state.exams.push({id:Date.now(),name,date});
+  state.exams.sort((a,b)=>a.date.localeCompare(b.date));
+  save();renderSettings();renderExamBanner();
+  populateExamSelect('tbExamLink');populateExamSelect('wbExamLink');
+  document.getElementById('examName').value='';document.getElementById('examDate').value='';
+}
+function deleteExam(id){
+  state.textbooks.forEach(b=>{if(b.examId===id)b.examId=null;});
+  state.workbooks.forEach(w=>{if(w.examId===id)w.examId=null;});
+  state.exams=state.exams.filter(e=>e.id!==id);
+  save();renderSettings();renderExamBanner();renderTextbooks();renderWorkbooks();
+  populateExamSelect('tbExamLink');populateExamSelect('wbExamLink');
+}
+function populateExamSelect(selId){
+  const sel=document.getElementById(selId);if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">（なし）</option>'+state.exams.map(e=>{
+    const d=daysUntil(e.date);
+    return `<option value="${e.id}">${e.name}（${d<0?'終了':d===0?'本日':'あと'+d+'日'}）</option>`;
+  }).join('');
+  sel.value=cur;
+}
+function renderExamBanner(){
+  const b=document.getElementById('examBanner');
+  const up=state.exams.filter(e=>daysUntil(e.date)>=0);
+  if(!up.length){b.className='banner hidden';return;}
+  const n=up[0],d=daysUntil(n.date);
+  b.className='banner '+(d<=3?'urgent':d<=7?'soon':'normal');
+  b.innerHTML=`<span>📅</span><span class="banner-label">${n.name}</span><span class="banner-days">${d===0?'本日！':'あと '+d+' 日'}</span>${up.length>1?`<span style="font-size:.72rem;opacity:.75">他 ${up.length-1} 件</span>`:''}`;
+}
+function renderSettings(){
+  const el=document.getElementById('examList');
+  if(!state.exams.length){el.innerHTML='<p class="hint" style="margin-bottom:8px">試験日が登録されていません</p>';}
+  else{
+    el.innerHTML=state.exams.map(e=>{
+      const d=daysUntil(e.date);
+      const label=d<0?'終了':d===0?'本日':`あと ${d} 日`;
+      const col=d<0?'var(--text3)':d<=3?'var(--hard)':d<=7?'var(--med)':'var(--easy)';
+      const ltb=state.textbooks.filter(b=>b.examId===e.id).map(b=>b.name).join('、');
+      const lwb=state.workbooks.filter(w=>w.examId===e.id).map(w=>w.name).join('、');
+      const linked=[ltb,lwb].filter(Boolean).join('　');
+      return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1"><div style="font-size:.85rem;font-weight:500">${e.name}</div>
+          <div style="font-size:.71rem;color:var(--text2);margin-top:2px">${e.date}${linked?' 　'+linked:''}</div></div>
+        <div style="font-family:'Lora',serif;font-size:.82rem;font-weight:600;color:${col};white-space:nowrap">${label}</div>
+        <button class="btn-danger" onclick="deleteExam(${e.id})">✕</button>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('lapReduction').value=state.settings.lapReduction;
+}
+
+// ════ BOOK CARD RENDERER (教科書・問題集共通) ════
+function bookCardHtml(book, isTb){
+  const task=todayTask(book);
+  const rec=calcRec(book);
+  const tgt=book.targetLaps||1;
+  const total=book.totalChaps*tgt;
+  const done=(( book.currentLap||1)-1)*book.totalChaps+(book.currentChap-1);
+  const pct=Math.round(Math.min(100,done/total*100));
+  const bl={easy:'badge-easy',med:'badge-med',hard:'badge-hard'}[book.diff];
+  const linked=book.examId?state.exams.find(e=>e.id===book.examId):null;
+  const pairedTb=(!isTb&&book.tbId)?state.textbooks.find(b=>b.id===book.tbId):null;
+  const lapStr=tgt>1?`　${book.currentLap||1}/${tgt}周目`:'';
+  const examOpts='<option value="">（なし）</option>'+state.exams.map(e=>`<option value="${e.id}"${book.examId===e.id?' selected':''}>${e.name}</option>`).join('');
+  const prefix=isTb?'tb':'wb';
+  const stateArr=isTb?'textbooks':'workbooks';
+  const renderFn=isTb?'renderTextbooks':'renderWorkbooks';
+  const histHtml=book.history&&book.history.length
+    ?`<div style="margin-top:8px"><div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">学習履歴</div>`
+      +book.history.slice(-8).reverse().map(h=>`<div style="font-size:.75rem;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border)">${h.date}　第${h.from}〜${h.to}章${h.lap>1?` (${h.lap}周目)`:''}</div>`).join('')+'</div>':'';
+
+  const lapSelectOpts=[1,2,3,4,5].map(n=>`<option value="${n}"${(book.targetLaps||1)===n?' selected':''}>${n}周</option>`).join('');
+  const tbOpts=isTb?'':('<option value="">（なし）</option>'+state.textbooks.map(b=>`<option value="${b.id}"${book.tbId===b.id?' selected':''}>${b.name}</option>`).join(''));
+
+  return `<div class="book-card">
+    <div class="book-card-header" onclick="document.getElementById('${prefix}-detail-${book.id}')?.classList.toggle('hidden')">
+      <div style="flex:1">
+        <div style="font-size:.87rem;font-weight:500${book.done?';text-decoration:line-through;color:var(--text3)':''}">
+          <span class="${isTb?'type-badge-tb':'type-badge-wb'}">${isTb?'教科書':'問題集'}</span>
+          ${book.subject?`<span style="font-size:.71rem;color:var(--text3)">${book.subject} / </span>`:''}${book.name}
+          <span class="badge ${bl}" style="margin-left:4px">${{easy:'易しい',med:'普通',hard:'難しい'}[book.diff]}</span>
+        </div>
+        <div style="font-size:.74rem;color:var(--text2);margin-top:4px">
+          第${book.currentChap}章〜 / 全${book.totalChaps}章${lapStr}
+          ${linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:''}
+          ${pairedTb?`　📖 ${pairedTb.name}`:''}
+        </div>
+        <div class="chap-progress-wrap"><div class="chap-progress-track">
+          <div class="chap-progress-fill" style="width:${pct}%;background:${isTb?'var(--accent)':'var(--accent2)'}"></div>
+        </div></div>
+        <div style="font-size:.72rem;color:var(--text2)">
+          今日：<strong style="color:var(--accent)">第${task.from}〜${task.to}章（${task.chaps}章・${task.mins}分）</strong>
+          　1章 ${task.timePerChap}分
+          ${rec!=null?`　推奨 ${rec}章/日`:''}
+          ${book.chapsPerDayOverride!=null?'<span style="color:var(--warn);font-size:.68rem">（手動上書き中）</span>':''}
+        </div>
+      </div>
+      <div style="color:var(--text3);font-size:.8rem;padding-left:6px">▾</div>
+    </div>
+    <div id="${prefix}-detail-${book.id}" class="book-card-body hidden">
+      <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:10px">
+        <div class="field field-sm"><label>現在の章</label>
+          <input type="number" class="inline-num" value="${book.currentChap}" min="1" max="${book.totalChaps}"
+            onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.currentChap=Math.min(b.totalChaps,Math.max(1,+this.value));save();${renderFn}();}})()">
+        </div>
+        <div class="field field-xs"><label>現在の周</label>
+          <input type="number" class="inline-num" value="${book.currentLap||1}" min="1" max="${book.targetLaps||1}"
+            onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.currentLap=Math.min(b.targetLaps,Math.max(1,+this.value));save();${renderFn}();}})()">
+        </div>
+        <div class="field field-xs"><label>目標周回</label>
+          <select class="inline-num" style="width:60px" onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.targetLaps=+this.value;save();${renderFn}();renderLapProgress();}})()">
+            ${lapSelectOpts}
+          </select>
+        </div>
+        <div class="field field-sm"><label>1日の章数（手動）</label>
+          <input type="number" class="inline-num" value="${book.chapsPerDayOverride!=null?book.chapsPerDayOverride:''}" placeholder="${rec||'auto'}" min="1"
+            onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){const n=parseInt(this.value);b.chapsPerDayOverride=(isNaN(n)||n<1)?null:n;save();${renderFn}();}})()">
+        </div>
+        <div class="field"><label>紐付け試験</label>
+          <select style="width:auto" onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.examId=this.value?+this.value:null;save();${renderFn}();renderSettings();}})()">
+            ${examOpts}
+          </select>
+        </div>
+        ${!isTb?`<div class="field"><label>セット教科書</label>
+          <select style="width:auto" onchange="(()=>{const b=state.workbooks.find(x=>x.id===${book.id});if(b){b.tbId=this.value?+this.value:null;save();renderWorkbooks();}})()">
+            ${tbOpts}
+          </select>
+        </div>`:''}
+      </div>
+      ${histHtml}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-ghost btn-sm" onclick="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.done=!b.done;save();${renderFn}();renderLapProgress();}})()">
+          ${book.done?'✓ 完了を解除':'✓ 完了にする'}
+        </button>
+        <button class="btn-danger" onclick="(()=>{state.${stateArr}=state.${stateArr}.filter(x=>x.id!==${book.id});save();${renderFn}();renderLapProgress();populateTbSelect('wbTbLink');})()">削除</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ════ TEXTBOOKS ════
+function addTextbook(){
+  const name=document.getElementById('tbName').value.trim();
+  if(!name)return;
+  state.textbooks.push({
+    id:Date.now(),name,
+    subject:document.getElementById('tbSubject').value.trim(),
+    totalChaps:+document.getElementById('tbTotalChaps').value||1,
+    timePerChap:+document.getElementById('tbTimePerChap').value||40,
+    currentChap:Math.max(1,+document.getElementById('tbStartChap').value||1),
+    diff:document.getElementById('tbDiff').value,
+    examId:+document.getElementById('tbExamLink').value||null,
+    targetLaps:+document.getElementById('tbTargetLaps').value||1,
+    currentLap:1,done:false,chapsPerDayOverride:null,history:[]
+  });
+  save();renderTextbooks();populateTbSelect('wbTbLink');
+  document.getElementById('tbName').value='';document.getElementById('tbSubject').value='';
+}
+function renderTextbooks(){
+  const el=document.getElementById('textbookList');
+  if(!state.textbooks.length){el.innerHTML='<div class="empty-state">まだ教科書が登録されていません</div>';return;}
+  el.innerHTML=state.textbooks.map(tb=>bookCardHtml(tb,true)).join('');
+}
+function populateTbSelect(selId){
+  const sel=document.getElementById(selId);if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">（なし）</option>'+state.textbooks.map(b=>`<option value="${b.id}">${b.subject?b.subject+' / ':''}${b.name}</option>`).join('');
+  sel.value=cur;
+}
+
+// ════ LAP PROGRESS (今日タブ) ════
+function renderLapProgress(){
+  const el=document.getElementById('lapProgressArea');
+  const all=[...state.textbooks,...state.workbooks];
+  if(!all.length){el.innerHTML='';return;}
+  const rows=all.map(b=>{
+    const total=b.totalChaps*(b.targetLaps||1);
+    const done=((b.currentLap||1)-1)*b.totalChaps+(b.currentChap-1);
+    const pct=Math.round(Math.min(100,done/total*100));
+    const isTb=!!state.textbooks.find(x=>x.id===b.id);
+    return `<div class="lap-row">
+      <div class="lap-row-label">${b.name}</div>
+      <div class="lap-bar-track"><div class="lap-bar-fill" style="width:${pct}%;background:${isTb?'var(--accent)':'var(--accent2)'}"></div></div>
+      <div class="lap-row-pct">${pct}%</div>
+    </div>`;
+  });
+  el.innerHTML=`<div class="lap-progress"><div class="lap-progress-title">進捗</div><div class="lap-rows">${rows.join('')}</div></div>`;
+}
+
+// ════ WORKBOOKS ════
+function addWorkbook(){
+  const name=document.getElementById('wbName').value.trim();
+  if(!name)return;
+  state.workbooks.push({
+    id:Date.now(),name,
+    subject:document.getElementById('wbSubject').value.trim(),
+    totalChaps:+document.getElementById('wbTotalChaps').value||1,
+    timePerChap:+document.getElementById('wbTimePerChap').value||20,
+    currentChap:Math.max(1,+document.getElementById('wbStartChap').value||1),
+    diff:document.getElementById('wbDiff').value,
+    examId:+document.getElementById('wbExamLink').value||null,
+    tbId:+document.getElementById('wbTbLink').value||null,
+    targetLaps:+document.getElementById('wbTargetLaps').value||1,
+    currentLap:1,done:false,chapsPerDayOverride:null,history:[]
+  });
+  save();renderWorkbooks();
+  document.getElementById('wbName').value='';document.getElementById('wbSubject').value='';
+}
+function renderWorkbooks(){
+  const el=document.getElementById('workbookList');
+  if(!state.workbooks.length){el.innerHTML='<div class="empty-state">登録されていません</div>';return;}
+  el.innerHTML=state.workbooks.map(wb=>bookCardHtml(wb,false)).join('');
+}
+
+// ════ TODOS ════
+function addTodo(){
+  const text=document.getElementById('todoText').value.trim();
+  const time=+document.getElementById('todoTime').value;
+  if(!text)return;
+  state.todos.push({id:Date.now(),text,time,done:false});
+  save();renderTodos();
+  document.getElementById('todoText').value='';
+}
+function toggleTodo(id){const t=state.todos.find(t=>t.id===id);if(t){t.done=!t.done;save();renderTodos();}}
+function deleteTodo(id){state.todos=state.todos.filter(t=>t.id!==id);save();renderTodos();}
+function renderTodos(){
+  const el=document.getElementById('todoList');
+  if(!state.todos.length){el.innerHTML='<div class="empty-state">TODOはありません</div>';return;}
+  el.innerHTML=state.todos.map(t=>`
+    <div class="todo-item">
+      <div class="todo-check${t.done?' checked':''}" onclick="toggleTodo(${t.id})"></div>
+      <div class="todo-text${t.done?' done':''}">${t.text}<span style="font-size:.7rem;color:var(--text3);margin-left:6px">${t.time}分</span></div>
+      <button class="btn-danger" onclick="deleteTodo(${t.id})">✕</button>
+    </div>`).join('');
+}
+
+// ════ CARRYOVERS ════
+function renderCoArea(){
+  const el=document.getElementById('coArea');
+  const b=document.getElementById('coBanner');
+  const active=state.carryovers.filter(co=>{
+    if(co.type==='textbook') return state.textbooks.find(x=>x.id===co.id&&!x.done);
+    if(co.type==='workbook') return state.workbooks.find(x=>x.id===co.id&&!x.done);
+    if(co.type==='todo') return state.todos.find(x=>x.id===co.id&&!x.done);
+    return false;
+  });
+  if(JSON.stringify(active)!==JSON.stringify(state.carryovers)){state.carryovers=active;save();}
+  if(!active.length){el.innerHTML='';b.className='banner hidden';return;}
+  b.className='banner co';
+  b.innerHTML=`⏮ <strong>${active.length}件の持ち越し</strong>　<span style="opacity:.8;font-size:.78rem">計画生成時に最優先で反映</span>`;
+  el.innerHTML=`<div class="co-list-card"><div class="co-list-title">⏮ 持ち越しタスク（${active.length}件）</div>
+    ${active.map(co=>`<div class="co-list-item">
+      <span>⚠</span>
+      <span style="flex:1">${co.name}
+        ${co.task?`<span style="font-size:.7rem;color:var(--text3)"> 第${co.task.from}〜${co.task.to}章</span>`:''}
+        <span style="font-size:.7rem;color:var(--text3);margin-left:4px">${co.time}分　${co.date}から</span>
+      </span>
+      <button class="co-dismiss" onclick="dismissCo('${co.uid}')">✕ 解除</button>
+    </div>`).join('')}
+  </div>`;
+}
+function dismissCo(uid){state.carryovers=state.carryovers.filter(co=>co.uid!==uid);save();renderCoArea();}
+
+// ════ GENERATE PLAN ════
+let lastPlanItems=[];
+function generatePlan(){
+  const budget=+document.getElementById('dailyMinutes').value;
+  const strategy=document.getElementById('strategy').value;
+
+  let pendingTbs=state.textbooks.filter(b=>!b.done);
+  let pendingWbs=state.workbooks.filter(w=>!w.done);
+  let pendingTodos=state.todos.filter(t=>!t.done);
+
+  const sortFn=arr=>{
+    if(strategy==='weak'){const ds={hard:0,med:1,easy:2};arr.sort((a,b)=>ds[a.diff]-ds[b.diff]);}
+    else if(strategy==='order') arr.sort((a,b)=>a.id-b.id);
+    else if(strategy==='short') arr.sort((a,b)=>todayTask(a).mins-todayTask(b).mins);
+    else if(strategy==='exam'){
+      const eu=id=>{const e=state.exams.find(e=>e.id===id);return e?daysUntil(e.date):9999;};
+      arr.sort((a,b)=>(a.examId?eu(a.examId):9999)-(b.examId?eu(b.examId):9999)||a.id-b.id);
+    }
+  };
+  sortFn(pendingTbs);sortFn(pendingWbs);pendingTodos.sort((a,b)=>a.id-b.id);
+
+  const coIds={textbook:new Set(),workbook:new Set(),todo:new Set()};
+  state.carryovers.forEach(co=>{if(coIds[co.type])coIds[co.type].add(co.id);});
+
+  let remaining=budget;
+  const units=[];
+  const usedWbIds=new Set();
+
+  const processTb=(tb,isCo)=>{
+    const task=todayTask(tb);
+    if(task.mins>remaining)return;
+    remaining-=task.mins;
+    const paired=[];
+    pendingWbs.filter(w=>w.tbId===tb.id&&!usedWbIds.has(w.id)).forEach(w=>{
+      const wTask=todayTask(w);
+      if(wTask.mins<=remaining){paired.push({...w,task:wTask,isCo:coIds.workbook.has(w.id)});remaining-=wTask.mins;usedWbIds.add(w.id);}
+    });
+    units.push({type:'tb',item:{...tb,task,isCo:isCo||coIds.textbook.has(tb.id)},paired});
+  };
+
+  pendingTbs.filter(b=>coIds.textbook.has(b.id)).forEach(b=>processTb(b,true));
+  pendingTbs.filter(b=>!coIds.textbook.has(b.id)).forEach(b=>{if(remaining>0)processTb(b,false);});
+
+  const usedTbIds=new Set(units.map(u=>u.item.id));
+  const standaloneWbs=pendingWbs.filter(w=>!usedWbIds.has(w.id)&&(!w.tbId||!usedTbIds.has(w.tbId)));
+  [...standaloneWbs.filter(w=>coIds.workbook.has(w.id)),...standaloneWbs.filter(w=>!coIds.workbook.has(w.id))].forEach(w=>{
+    const task=todayTask(w);
+    if(task.mins<=remaining){units.push({type:'wb',item:{...w,task,isCo:coIds.workbook.has(w.id)}});remaining-=task.mins;}
+  });
+
+  [...pendingTodos.filter(t=>coIds.todo.has(t.id)),...pendingTodos.filter(t=>!coIds.todo.has(t.id))].forEach(t=>{
+    if(t.time<=remaining){units.push({type:'todo',item:{...t,isCo:coIds.todo.has(t.id)}});remaining-=t.time;}
+  });
+
+  const totalUsed=budget-remaining;
+  const out=document.getElementById('planOutput');
+  if(!units.length){out.innerHTML=`<div class="card"><div class="empty-state">予定できる項目がありません。<br>教科書・問題集・TODOを先に登録してください。</div></div>`;return;}
+
+  const upcoming=state.exams.filter(e=>daysUntil(e.date)>=0);
+  const examHint=upcoming.length?`<div class="summary-chip"><span>${daysUntil(upcoming[0].date)===0?'本日':daysUntil(upcoming[0].date)+'日後'}</span>${upcoming[0].name}</div>`:'';
+  const coCount=units.filter(u=>u.item.isCo).length;
+  const stratLabel={weak:'弱点優先',order:'登録順',short:'短時間優先',exam:'試験均等割り'}[strategy];
+
+  let html=`<div class="summary-bar">
+    <div class="summary-chip"><span>${totalUsed}分</span>予定合計</div>
+    <div class="summary-chip"><span>${remaining}分</span>余裕</div>
+    <div class="summary-chip"><span>${units.length}</span>タスク数</div>
+    <div class="summary-chip"><span>${stratLabel}</span>戦略</div>
+    ${coCount?`<div class="summary-chip co"><span>⏮ ${coCount}</span>持ち越し含む</div>`:''}
+    ${examHint}
+  </div>`;
+
+  const cols={easy:'var(--easy)',med:'var(--med)',hard:'var(--hard)'};
+  const dls={easy:'易しい',med:'普通',hard:'難しい'};
+  lastPlanItems=[];
+
+  const renderBookPlanItem=(book,task,isPaired,isTb)=>{
+    const coTag=book.isCo?'<span class="co-tag">⏮ 持ち越し</span>':'';
+    const linked=book.examId?state.exams.find(e=>e.id===book.examId):null;
+    const lapNote=task.lap>1?`　${task.lap}周目`:'';
+    const examNote=linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:'';
+    return `<div class="plan-item${isPaired?' wb-paired':''}${book.isCo?' co-hi':''}">
+      <div class="plan-dot" style="background:${isTb?cols[book.diff]:'var(--accent2)'}"></div>
+      <div class="plan-item-left">
+        <div class="plan-item-name">
+          <span class="${isTb?'type-badge-tb':'type-badge-wb'}" style="font-size:.6rem">${isTb?'教科書':'問題集'}</span>
+          <span class="chap-range-tag">第${task.from}〜${task.to}章</span>
+          ${book.subject?book.subject+' — ':''}${book.name}${coTag}
+        </div>
+        <div class="plan-item-sub">${dls[book.diff]}　${task.chaps}章 / 1章${task.timePerChap}分${lapNote}${examNote}</div>
+      </div>
+      <div class="plan-item-time">${task.mins}分</div>
+    </div>`;
+  };
+
+  units.forEach(u=>{
+    if(u.type==='tb'){
+      lastPlanItems.push({type:'textbook',id:u.item.id,name:u.item.name,time:u.item.task.mins,done:false,uid:`tb-${u.item.id}`,task:u.item.task});
+      u.paired.forEach(w=>lastPlanItems.push({type:'workbook',id:w.id,name:w.name,time:w.task.mins,done:false,uid:`wb-${w.id}`,task:w.task}));
+      html+=`<div class="set-block">${renderBookPlanItem(u.item,u.item.task,false,true)}${u.paired.map(w=>renderBookPlanItem(w,w.task,true,false)).join('')}</div>`;
+    } else if(u.type==='wb'){
+      lastPlanItems.push({type:'workbook',id:u.item.id,name:u.item.name,time:u.item.task.mins,done:false,uid:`wb-${u.item.id}`,task:u.item.task});
+      html+=`<div class="set-block">${renderBookPlanItem(u.item,u.item.task,false,false)}</div>`;
+    } else {
+      lastPlanItems.push({type:'todo',id:u.item.id,name:u.item.text,time:u.item.time,done:false,uid:`todo-${u.item.id}`});
+      const coTag=u.item.isCo?'<span class="co-tag">⏮ 持ち越し</span>':'';
+      html+=`<div class="set-block"><div class="plan-item${u.item.isCo?' co-hi':''}">
+        <div class="plan-dot" style="background:var(--accent3)"></div>
+        <div class="plan-item-left"><div class="plan-item-name">${u.item.text}${coTag}</div></div>
+        <div class="plan-item-time">${u.item.time}分</div>
+      </div></div>`;
+    }
+  });
+
+  html+=`<div id="confirmArea"><button class="confirm-btn" onclick="showConfirmChecks()">📋 今日の計画を確定して未完了を記録する</button></div>`;
+  out.innerHTML=html;
+}
+
+// ════ CONFIRM ════
+function showConfirmChecks(){
+  document.getElementById('confirmArea').innerHTML=`<div class="co-list-card" style="margin-top:10px">
+    <div class="co-list-title">完了できなかった項目のチェックを外してください</div>
+    ${lastPlanItems.map((item,i)=>`<div class="confirm-check-item">
+      <input type="checkbox" id="ci${i}" checked style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+      <label for="ci${i}" style="flex:1;cursor:pointer">${item.name}
+        ${item.task?`<span style="font-size:.7rem;color:var(--text3)"> 第${item.task.from}〜${item.task.to}章</span>`:''}
+        <span style="font-size:.7rem;color:var(--text3);margin-left:4px">${item.time}分</span>
+      </label>
+    </div>`).join('')}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="finalizeConfirm()">記録する</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('confirmArea').innerHTML='<button class=\\'confirm-btn\\' onclick=\\'showConfirmChecks()\\'>📋 今日の計画を確定して未完了を記録する</button>'">キャンセル</button>
+    </div>
+  </div>`;
+}
+
+function advanceBook(book,task,today){
+  if(!book.history)book.history=[];
+  book.history.push({date:today,from:task.from,to:task.to,lap:book.currentLap||1});
+  book.currentChap=task.to+1;
+  if(book.currentChap>book.totalChaps){
+    if((book.currentLap||1)<(book.targetLaps||1)){book.currentLap=(book.currentLap||1)+1;book.currentChap=1;}
+    else{book.done=true;}
+  }
+}
+
+function finalizeConfirm(){
+  const today=todayStr();
+  lastPlanItems.forEach((item,i)=>{item.done=!!(document.getElementById('ci'+i)?.checked);});
+
+  lastPlanItems.filter(item=>item.type==='textbook'&&item.done&&item.task).forEach(item=>{
+    const tb=state.textbooks.find(b=>b.id===item.id);if(tb)advanceBook(tb,item.task,today);
+  });
+  lastPlanItems.filter(item=>item.type==='workbook'&&item.done&&item.task).forEach(item=>{
+    const wb=state.workbooks.find(w=>w.id===item.id);if(wb)advanceBook(wb,item.task,today);
+  });
+  lastPlanItems.filter(item=>!item.done).forEach(item=>{
+    if(!state.carryovers.find(co=>co.uid===item.uid))
+      state.carryovers.push({...item,date:today});
+  });
+
+  save();renderCoArea();renderTextbooks();renderWorkbooks();renderLapProgress();
+  document.getElementById('confirmArea').innerHTML='<p style="font-size:.82rem;color:var(--done);margin-top:6px">✓ 記録しました！章が自動で進みました。</p>';
+}
+
+// ════ LAP SETTINGS ════
+function saveLapSettings(){state.settings.lapReduction=+document.getElementById('lapReduction').value;save();}
+
+// ════ INIT ════
+renderTextbooks();renderWorkbooks();renderTodos();
+renderSettings();renderExamBanner();renderLapProgress();renderCoArea();
+populateExamSelect('tbExamLink');populateExamSelect('wbExamLink');populateTbSelect('wbTbLink');
+</script>
+</body>
+</html>
