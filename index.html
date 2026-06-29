@@ -232,6 +232,7 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
       <div class="field field-sm"><label>総章数</label><input type="number" id="wbTotalChaps" value="30" min="1" max="999"></div>
       <div class="field field-sm"><label>1章あたり(分)</label><input type="number" id="wbTimePerChap" value="20" min="1" max="180"></div>
       <div class="field field-sm"><label>現在の章</label><input type="number" id="wbStartChap" value="1" min="1" title="すでに進めている場合は現在の章を入力"></div>
+      <div class="field field-md"><label>🗓 始める日</label><input type="date" id="wbStartDate" title="未来の日付を設定すると、その日から計画に入ります"></div>
       <div class="field field-md"><label>紐付ける試験</label><select id="wbExamLink"><option value="">（なし）</option></select></div>
       <div class="field field-md"><label>セット教科書</label><select id="wbTbLink"><option value="">（なし）</option></select></div>
     </div>
@@ -250,7 +251,7 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
       </div>
       <button class="btn btn-primary" style="margin-top:20px" onclick="addWorkbook()">追加</button>
     </div>
-    <p class="hint" style="margin-top:8px">すでに途中まで進めている場合は「現在の章」と「現在の周」を設定してください。「セット教科書」を設定すると計画でその教科書の直後に並びます。</p>
+    <p class="hint" style="margin-top:8px">「始める日」を設定するとその日になるまで計画に出てきません。すでに途中まで進めている場合は「現在の章」と「現在の周」を設定してください。</p>
   </div>
   <div class="card">
     <div class="card-title">📝 登録済みの問題集</div>
@@ -391,12 +392,11 @@ function calcPaceStatus(book){
   if(!deadlineDate) return null;
 
   const totalDays=Math.max(1, (()=>{
-    // days from "start" (first history date or today - some estimate) to deadline
-    // use totalChaps * targetLaps as scope; figure out how many days total we had
-    // Simplest: assume study started when book was registered. Use id timestamp.
-    const startMs = book.id; // timestamp
+    // Use startDate if set, else book registration timestamp
+    const startMs = book.startDate
+      ? new Date(book.startDate+'T00:00:00').getTime()
+      : book.id;
     const deadlineMs = new Date(deadlineDate+'T00:00:00').getTime();
-    const todayMs = (() => { const t=new Date(); t.setHours(0,0,0,0); return t.getTime(); })();
     const total = Math.ceil((deadlineMs - startMs) / 86400000);
     return Math.max(1, total);
   })());
@@ -544,14 +544,14 @@ function bookCardHtml(book, isTb){
         </div>
         <div style="font-size:.74rem;color:var(--text2);margin-top:4px">
           第${book.currentChap}章〜 / 全${book.totalChaps}章${lapStr}
-          ${book.goalDate&&goalDaysUntil(book)!=null?`　📌 完了目標 ${book.goalDate}（あと${goalDaysUntil(book)}日）`:linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:''}
+          ${book.startDate&&daysUntil(book.startDate)>0?`　🗓 開始 ${book.startDate}（あと${daysUntil(book.startDate)}日）`:''}${book.goalDate&&goalDaysUntil(book)!=null?`　📌 完了目標 ${book.goalDate}（あと${goalDaysUntil(book)}日）`:linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:''}
           ${pairedTb?`　📖 ${pairedTb.name}`:''}
         </div>
         <div class="chap-progress-wrap"><div class="chap-progress-track">
           <div class="chap-progress-fill" style="width:${pct}%;background:${isTb?'var(--accent)':'var(--accent2)'}"></div>
         </div></div>
         <div style="font-size:.72rem;color:var(--text2)">
-          今日：<strong style="color:var(--accent)">第${task.from}〜${task.to}章（${task.chaps}章・${task.mins}分）</strong>
+          ${!isTb&&book.startDate&&daysUntil(book.startDate)>0?`<span style="color:var(--text3);font-size:.75rem">🗓 開始まであと${daysUntil(book.startDate)}日</span>`:`今日：<strong style="color:var(--accent)">第${task.from}〜${task.to}章（${task.chaps}章・${task.mins}分）</strong>`}
           　1章 ${task.timePerChap}分
           ${rec!=null?`　推奨 ${rec}章/日`:''}
           ${book.goalDate&&goalDaysUntil(book)!=null?`<span style="font-size:.68rem;color:var(--med)">（完了目標日基準）</span>`:rec!=null?'<span style="font-size:.68rem;color:var(--text3)">（試験日基準）</span>':''}
@@ -589,6 +589,11 @@ function bookCardHtml(book, isTb){
             onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.goalDate=this.value||null;save();${renderFn}();renderLapProgress();}})()">
           ${book.goalDate&&goalDaysUntil(book)!=null?`<span class="hint" style="margin-top:2px;color:var(--med)">あと${goalDaysUntil(book)}日</span>`:'<span class="hint" style="margin-top:2px">空欄で試験日を使用</span>'}
         </div>
+        ${!isTb?`<div class="field field-md"><label>🗓 始める日</label>
+          <input type="date" style="width:auto;min-width:140px" value="${book.startDate||''}"
+            onchange="(()=>{const b=state.workbooks.find(x=>x.id===${book.id});if(b){b.startDate=this.value||null;save();renderWorkbooks();}})()">
+          ${book.startDate&&daysUntil(book.startDate)>0?`<span class="hint" style="margin-top:2px;color:var(--accent2)">あと${daysUntil(book.startDate)}日後に開始</span>`:'<span class="hint" style="margin-top:2px">空欄で今日から</span>'}
+        </div>`:''}
         ${!isTb?`<div class="field"><label>セット教科書</label>
           <select style="width:auto" onchange="(()=>{const b=state.workbooks.find(x=>x.id===${book.id});if(b){b.tbId=this.value?+this.value:null;save();renderWorkbooks();}})()">
             ${tbOpts}
@@ -813,7 +818,8 @@ function addWorkbook(){
     targetLaps:+document.getElementById('wbTargetLaps').value||1,
     currentLap:+(document.getElementById('wbStartLap').value)||1,
     done:false,chapsPerDayOverride:null,history:[],
-    goalDate:document.getElementById('wbGoalDate').value||null
+    goalDate:document.getElementById('wbGoalDate').value||null,
+    startDate:document.getElementById('wbStartDate').value||null
   });
   save();renderWorkbooks();
   document.getElementById('wbName').value='';document.getElementById('wbSubject').value='';
@@ -880,7 +886,7 @@ function generatePlan(){
   const strategy=document.getElementById('strategy').value;
 
   let pendingTbs=state.textbooks.filter(b=>!b.done);
-  let pendingWbs=state.workbooks.filter(w=>!w.done);
+  let pendingWbs=state.workbooks.filter(w=>!w.done&&(!w.startDate||daysUntil(w.startDate)<=0));
   let pendingTodos=state.todos.filter(t=>!t.done);
 
   const sortFn=arr=>{
