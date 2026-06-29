@@ -189,7 +189,7 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
     <div class="row" style="margin-bottom:8px">
       <div class="field field-sm"><label>総章数</label><input type="number" id="tbTotalChaps" value="10" min="1" max="999"></div>
       <div class="field field-sm"><label>1章あたり(分)</label><input type="number" id="tbTimePerChap" value="40" min="1" max="300"></div>
-      <div class="field field-sm"><label>開始章</label><input type="number" id="tbStartChap" value="1" min="1"></div>
+      <div class="field field-sm"><label>現在の章</label><input type="number" id="tbStartChap" value="1" min="1" title="すでに進めている場合は現在の章を入力"></div>
       <div class="field field-md"><label>紐付ける試験</label><select id="tbExamLink"><option value="">（なし）</option></select></div>
     </div>
     <div class="row">
@@ -199,8 +199,15 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
       <div class="field field-sm"><label>目標周回数</label>
         <select id="tbTargetLaps"><option value="1">1周</option><option value="2" selected>2周</option><option value="3">3周</option><option value="4">4周</option><option value="5">5周</option></select>
       </div>
+      <div class="field field-xs"><label>現在の周</label>
+        <select id="tbStartLap"><option value="1" selected>1周目</option><option value="2">2周目</option><option value="3">3周目</option><option value="4">4周目</option><option value="5">5周目</option></select>
+      </div>
+      <div class="field field-md"><label>📌 教材完了目標日</label>
+        <input type="date" id="tbGoalDate">
+      </div>
       <button class="btn btn-primary" style="margin-top:20px" onclick="addTextbook()">追加</button>
     </div>
+    <p class="hint" style="margin-top:8px">「教材完了目標日」を設定すると試験日より前に終わらせる計画を立てられます。</p>
   </div>
   <div class="card">
     <div class="card-title">📖 登録済みの教科書</div>
@@ -224,7 +231,7 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
     <div class="row" style="margin-bottom:8px">
       <div class="field field-sm"><label>総章数</label><input type="number" id="wbTotalChaps" value="30" min="1" max="999"></div>
       <div class="field field-sm"><label>1章あたり(分)</label><input type="number" id="wbTimePerChap" value="20" min="1" max="180"></div>
-      <div class="field field-sm"><label>開始章</label><input type="number" id="wbStartChap" value="1" min="1"></div>
+      <div class="field field-sm"><label>現在の章</label><input type="number" id="wbStartChap" value="1" min="1" title="すでに進めている場合は現在の章を入力"></div>
       <div class="field field-md"><label>紐付ける試験</label><select id="wbExamLink"><option value="">（なし）</option></select></div>
       <div class="field field-md"><label>セット教科書</label><select id="wbTbLink"><option value="">（なし）</option></select></div>
     </div>
@@ -235,9 +242,15 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
       <div class="field field-sm"><label>目標周回数</label>
         <select id="wbTargetLaps"><option value="1">1周</option><option value="2" selected>2周</option><option value="3">3周</option><option value="4">4周</option><option value="5">5周</option></select>
       </div>
+      <div class="field field-xs"><label>現在の周</label>
+        <select id="wbStartLap"><option value="1" selected>1周目</option><option value="2">2周目</option><option value="3">3周目</option><option value="4">4周目</option><option value="5">5周目</option></select>
+      </div>
+      <div class="field field-md"><label>📌 教材完了目標日</label>
+        <input type="date" id="wbGoalDate">
+      </div>
       <button class="btn btn-primary" style="margin-top:20px" onclick="addWorkbook()">追加</button>
     </div>
-    <p class="hint" style="margin-top:8px">「セット教科書」を設定すると計画でその教科書の直後に並びます。</p>
+    <p class="hint" style="margin-top:8px">すでに途中まで進めている場合は「現在の章」と「現在の周」を設定してください。「セット教科書」を設定すると計画でその教科書の直後に並びます。</p>
   </div>
   <div class="card">
     <div class="card-title">📝 登録済みの問題集</div>
@@ -344,14 +357,69 @@ function todayStr(){return new Date().toISOString().slice(0,10);}
 function lapReduction(){return state.settings.lapReduction/100;}
 
 // 推奨1日章数 — 残り（全周込み）÷ 残り日数
+// goalDate（教材完了目標日）があればそちらを優先、なければ試験日を使用
 function calcRec(book){
-  if(!book.examId) return null;
-  const exam=state.exams.find(e=>e.id===book.examId);
-  if(!exam) return null;
-  const days=Math.max(1,daysUntil(exam.date));
+  let deadline=null;
+  if(book.goalDate){
+    // goalDate is a raw date string e.g. "2024-10-01"
+    const d=daysUntil(book.goalDate);
+    if(d>=0) deadline=d;
+  }
+  if(deadline===null&&book.examId){
+    const exam=state.exams.find(e=>e.id===book.examId);
+    if(exam) deadline=Math.max(0,daysUntil(exam.date));
+  }
+  if(deadline===null) return null;
+  const days=Math.max(1,deadline);
   const curLap=book.currentLap||1, tgtLap=book.targetLaps||1;
   const remaining=(book.totalChaps-(book.currentChap-1))+(book.totalChaps*(tgtLap-curLap));
   return remaining<=0?0:Math.max(1,Math.ceil(remaining/days));
+}
+// goalDateの残り日数を表示用に返す
+function goalDaysUntil(book){
+  if(book.goalDate){const d=daysUntil(book.goalDate);if(d>=0)return d;}
+  return null;
+}
+
+// ペース判定: 今日時点で何章完了してるべきか vs 実際
+// returns {status:'ok'|'warn'|'danger', idealDone, actualDone, diff, pct}
+function calcPaceStatus(book){
+  // figure out deadline
+  let deadlineDate=null;
+  if(book.goalDate&&goalDaysUntil(book)!=null) deadlineDate=book.goalDate;
+  else if(book.examId){const e=state.exams.find(e=>e.id===book.examId);if(e)deadlineDate=e.date;}
+  if(!deadlineDate) return null;
+
+  const totalDays=Math.max(1, (()=>{
+    // days from "start" (first history date or today - some estimate) to deadline
+    // use totalChaps * targetLaps as scope; figure out how many days total we had
+    // Simplest: assume study started when book was registered. Use id timestamp.
+    const startMs = book.id; // timestamp
+    const deadlineMs = new Date(deadlineDate+'T00:00:00').getTime();
+    const todayMs = (() => { const t=new Date(); t.setHours(0,0,0,0); return t.getTime(); })();
+    const total = Math.ceil((deadlineMs - startMs) / 86400000);
+    return Math.max(1, total);
+  })());
+
+  const daysLeft = Math.max(0, daysUntil(deadlineDate));
+  const daysElapsed = Math.max(0, totalDays - daysLeft);
+
+  const totalChaps = book.totalChaps * (book.targetLaps||1);
+  const actualDone = ((book.currentLap||1)-1)*book.totalChaps + (book.currentChap-1);
+
+  // ideal = what fraction of total elapsed
+  const idealDone = Math.round(totalChaps * (daysElapsed / totalDays));
+  const diff = actualDone - idealDone; // positive = ahead, negative = behind
+
+  // pace percentage: actualDone / idealDone
+  const pacePct = idealDone > 0 ? Math.round(actualDone / idealDone * 100) : (actualDone > 0 ? 120 : 100);
+
+  let status;
+  if(diff >= 0) status = 'ok';
+  else if(diff >= -2) status = 'warn';
+  else status = 'danger';
+
+  return {status, idealDone, actualDone, totalChaps, diff, daysLeft, pacePct, deadlineDate};
 }
 
 // 今日のタスク（周回短縮を教科書・問題集両方に適用）
@@ -476,7 +544,7 @@ function bookCardHtml(book, isTb){
         </div>
         <div style="font-size:.74rem;color:var(--text2);margin-top:4px">
           第${book.currentChap}章〜 / 全${book.totalChaps}章${lapStr}
-          ${linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:''}
+          ${book.goalDate&&goalDaysUntil(book)!=null?`　📌 完了目標 ${book.goalDate}（あと${goalDaysUntil(book)}日）`:linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:''}
           ${pairedTb?`　📖 ${pairedTb.name}`:''}
         </div>
         <div class="chap-progress-wrap"><div class="chap-progress-track">
@@ -486,6 +554,7 @@ function bookCardHtml(book, isTb){
           今日：<strong style="color:var(--accent)">第${task.from}〜${task.to}章（${task.chaps}章・${task.mins}分）</strong>
           　1章 ${task.timePerChap}分
           ${rec!=null?`　推奨 ${rec}章/日`:''}
+          ${book.goalDate&&goalDaysUntil(book)!=null?`<span style="font-size:.68rem;color:var(--med)">（完了目標日基準）</span>`:rec!=null?'<span style="font-size:.68rem;color:var(--text3)">（試験日基準）</span>':''}
           ${book.chapsPerDayOverride!=null?'<span style="color:var(--warn);font-size:.68rem">（手動上書き中）</span>':''}
         </div>
       </div>
@@ -511,9 +580,14 @@ function bookCardHtml(book, isTb){
             onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){const n=parseInt(this.value);b.chapsPerDayOverride=(isNaN(n)||n<1)?null:n;save();${renderFn}();}})()">
         </div>
         <div class="field"><label>紐付け試験</label>
-          <select style="width:auto" onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.examId=this.value?+this.value:null;save();${renderFn}();renderSettings();}})()">
+          <select style="width:auto" onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.examId=this.value?+this.value:null;save();${renderFn}();renderSettings();renderLapProgress();}})()">
             ${examOpts}
           </select>
+        </div>
+        <div class="field field-md"><label>📌 教材完了目標日</label>
+          <input type="date" style="width:auto;min-width:140px" value="${book.goalDate||''}"
+            onchange="(()=>{const b=state.${stateArr}.find(x=>x.id===${book.id});if(b){b.goalDate=this.value||null;save();${renderFn}();renderLapProgress();}})()">
+          ${book.goalDate&&goalDaysUntil(book)!=null?`<span class="hint" style="margin-top:2px;color:var(--med)">あと${goalDaysUntil(book)}日</span>`:'<span class="hint" style="margin-top:2px">空欄で試験日を使用</span>'}
         </div>
         ${!isTb?`<div class="field"><label>セット教科書</label>
           <select style="width:auto" onchange="(()=>{const b=state.workbooks.find(x=>x.id===${book.id});if(b){b.tbId=this.value?+this.value:null;save();renderWorkbooks();}})()">
@@ -545,7 +619,9 @@ function addTextbook(){
     diff:document.getElementById('tbDiff').value,
     examId:+document.getElementById('tbExamLink').value||null,
     targetLaps:+document.getElementById('tbTargetLaps').value||1,
-    currentLap:1,done:false,chapsPerDayOverride:null,history:[]
+    currentLap:+(document.getElementById('tbStartLap').value)||1,
+    done:false,chapsPerDayOverride:null,history:[],
+    goalDate:document.getElementById('tbGoalDate').value||null
   });
   save();renderTextbooks();populateTbSelect('wbTbLink');
   document.getElementById('tbName').value='';document.getElementById('tbSubject').value='';
@@ -592,73 +668,108 @@ function renderExamProgress(){
   const upcomingExams=state.exams.filter(e=>daysUntil(e.date)>=0);
   if(!upcomingExams.length){el.innerHTML='';return;}
 
+  const paceColors={ok:'var(--easy)',warn:'var(--med)',danger:'var(--hard)'};
+  const paceBgs={ok:'#d4ede3',warn:'#faecd0',danger:'#f5dbd9'};
+  const paceLabels={ok:'順調',warn:'やや遅れ',danger:'遅れ'};
+  const paceIcons={ok:'✓','warn':'△',danger:'!'};
+
   const cards=upcomingExams.map(exam=>{
     const days=daysUntil(exam.date);
     const urgency=days<=3?'var(--hard)':days<=7?'var(--med)':'var(--accent)';
     const urgencyBg=days<=3?'#fdecea':days<=7?'#fdf3e0':'#eee8da';
     const urgencyBorder=days<=3?'#e8a09a':days<=7?'#e0c070':'var(--border)';
 
-    // collect all books linked to this exam
     const linkedBooks=[
       ...state.textbooks.filter(b=>b.examId===exam.id),
       ...state.workbooks.filter(w=>w.examId===exam.id)
     ];
     if(!linkedBooks.length) return '';
 
-    // aggregate chapters
     let totalPlanned=0, totalDone=0;
+
     const bookRows=linkedBooks.map(b=>{
       const isTb=!!state.textbooks.find(x=>x.id===b.id);
       const tgt=b.targetLaps||1;
-      const planned=b.totalChaps*tgt;         // 全周込みの総章数
-      const done=((b.currentLap||1)-1)*b.totalChaps+(b.currentChap-1);
-      const pct=Math.round(Math.min(100,done/planned*100));
+      const planned=b.totalChaps*tgt;
+      const done=Math.min(((b.currentLap||1)-1)*b.totalChaps+(b.currentChap-1), planned);
+      const progPct=Math.round(done/planned*100);
       totalPlanned+=planned;
-      totalDone+=Math.min(done,planned);
+      totalDone+=done;
+
       const barColor=isTb?'var(--accent)':'var(--accent2)';
       const badge=isTb
         ?'<span class="type-badge-tb" style="font-size:.6rem">教科書</span>'
         :'<span class="type-badge-wb" style="font-size:.6rem">問題集</span>';
-      return `<div style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;font-size:.75rem;margin-bottom:3px">
-          <span>${badge}${b.subject?b.subject+' / ':''}${b.name}</span>
-          <span style="color:var(--text3);white-space:nowrap;margin-left:8px">${done} / ${planned}章　<strong style="color:${barColor}">${pct}%</strong></span>
+
+      // pace gauge
+      const pace=calcPaceStatus(b);
+      const paceHtml=pace?(()=>{
+        const sc=paceColors[pace.status];
+        const sbg=paceBgs[pace.status];
+        const sl=paceLabels[pace.status];
+        // ideal marker position
+        const idealPct=Math.round(Math.min(100,pace.idealDone/planned*100));
+        const diffLabel=pace.diff===0?'ちょうど':pace.diff>0?`+${pace.diff}章 先行`:`${pace.diff}章 遅れ`;
+        return `<div style="margin-top:5px;margin-bottom:2px">
+          <!-- dual bar: ideal vs actual -->
+          <div style="position:relative;height:10px;background:var(--border);border-radius:5px;overflow:visible;margin-bottom:4px">
+            <!-- ideal marker -->
+            <div style="position:absolute;top:-2px;left:${idealPct}%;width:2px;height:14px;background:var(--text3);border-radius:1px;z-index:2" title="理想進捗"></div>
+            <!-- actual fill -->
+            <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(100,progPct)}%;background:${sc};border-radius:5px;transition:width .4s;z-index:1"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:.65rem;color:var(--text3)">実績 ${done}章　理想 ${pace.idealDone}章　残 ${planned-done}章</span>
+            <span style="font-size:.67rem;font-weight:700;padding:1px 6px;border-radius:10px;background:${sbg};color:${sc}">${sl}　${diffLabel}</span>
+          </div>
+        </div>`;
+      })():'';
+
+      const goalTag=b.goalDate&&goalDaysUntil(b)!=null
+        ?`<span style="font-size:.63rem;color:var(--med);margin-left:4px">📌 完了目標 あと${goalDaysUntil(b)}日</span>`:'';
+
+      return `<div style="padding:8px 0;border-bottom:1px solid ${urgencyBorder}">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:.75rem;margin-bottom:3px">
+          <span style="font-weight:500">${badge}${b.subject?b.subject+' / ':''}${b.name}${goalTag}</span>
+          <span style="color:var(--text3);white-space:nowrap;margin-left:8px"><strong style="color:${barColor}">${progPct}%</strong></span>
         </div>
-        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
-        </div>
+        ${paceHtml}
       </div>`;
     }).join('');
 
     const totalPct=totalPlanned?Math.round(Math.min(100,totalDone/totalPlanned*100)):0;
-    // chapters remaining until exam
     const remaining=totalPlanned-totalDone;
 
+    // overall pace across all linked books
+    const anyDanger=linkedBooks.some(b=>{const p=calcPaceStatus(b);return p&&p.status==='danger';});
+    const anyWarn=linkedBooks.some(b=>{const p=calcPaceStatus(b);return p&&p.status==='warn';});
+    const overallStatus=anyDanger?'danger':anyWarn?'warn':'ok';
+    const overallPaceHtml=`<span style="font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:10px;background:${paceBgs[overallStatus]};color:${paceColors[overallStatus]};margin-left:8px">${paceIcons[overallStatus]} ${paceLabels[overallStatus]}</span>`;
+
     return `<div style="background:${urgencyBg};border:1px solid ${urgencyBorder};border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
         <span style="font-size:.78rem;font-weight:700;color:${urgency}">📅 ${exam.name}</span>
         <span style="font-family:'Lora',serif;font-size:.85rem;font-weight:700;color:${urgency}">${days===0?'本日！':'あと '+days+' 日'}</span>
+        ${overallPaceHtml}
       </div>
-      <!-- total progress big display -->
-      <div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap">
+      <!-- summary row -->
+      <div style="display:flex;gap:14px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
         <div style="text-align:center">
-          <div style="font-family:'Lora',serif;font-size:1.6rem;font-weight:700;color:${urgency};line-height:1">${totalPct}%</div>
-          <div style="font-size:.65rem;color:var(--text3);margin-top:2px">達成率</div>
+          <div style="font-family:'Lora',serif;font-size:1.5rem;font-weight:700;color:${urgency};line-height:1">${totalPct}%</div>
+          <div style="font-size:.62rem;color:var(--text3);margin-top:1px">達成率</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px;justify-content:center">
-          <div style="font-size:.75rem;color:var(--text2)">予定　<strong style="font-family:'Lora',serif;color:var(--text)">${totalPlanned}章</strong></div>
-          <div style="font-size:.75rem;color:var(--text2)">完了　<strong style="font-family:'Lora',serif;color:${urgency}">${totalDone}章</strong></div>
-          <div style="font-size:.75rem;color:var(--text2)">残り　<strong style="font-family:'Lora',serif;color:var(--text3)">${remaining}章</strong></div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:.73rem;color:var(--text2)">予定 <strong style="color:var(--text)">${totalPlanned}章</strong></div>
+          <div style="font-size:.73rem;color:var(--text2)">完了 <strong style="color:${urgency}">${totalDone}章</strong></div>
+          <div style="font-size:.73rem;color:var(--text2)">残り <strong style="color:var(--text3)">${remaining}章</strong></div>
         </div>
-        <div style="flex:1;display:flex;align-items:center;min-width:80px">
-          <div style="width:100%">
-            <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
-              <div style="height:100%;width:${totalPct}%;background:${urgency};border-radius:5px;transition:width .4s"></div>
-            </div>
+        <div style="flex:1;min-width:70px">
+          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${totalPct}%;background:${urgency};border-radius:4px;transition:width .4s"></div>
           </div>
         </div>
       </div>
-      <!-- per-book breakdown -->
+      <!-- per-book pace rows -->
       ${bookRows}
     </div>`;
   }).filter(Boolean).join('');
@@ -700,7 +811,9 @@ function addWorkbook(){
     examId:+document.getElementById('wbExamLink').value||null,
     tbId:+document.getElementById('wbTbLink').value||null,
     targetLaps:+document.getElementById('wbTargetLaps').value||1,
-    currentLap:1,done:false,chapsPerDayOverride:null,history:[]
+    currentLap:+(document.getElementById('wbStartLap').value)||1,
+    done:false,chapsPerDayOverride:null,history:[],
+    goalDate:document.getElementById('wbGoalDate').value||null
   });
   save();renderWorkbooks();
   document.getElementById('wbName').value='';document.getElementById('wbSubject').value='';
