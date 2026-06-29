@@ -129,6 +129,7 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
 
 .settings-grid{display:flex;flex-direction:column;gap:12px}
 .hint{font-size:.72rem;color:var(--text3);margin-top:3px;line-height:1.5}
+.task-complete-row{margin-top:7px;padding-top:6px;border-top:1px dashed var(--border)}
 .inline-num{width:54px;display:inline-block;padding:2px 6px;font-size:.82rem;border-radius:6px;text-align:center}
 </style>
 </head>
@@ -170,6 +171,8 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
     </div>
     <button class="btn generate-btn" onclick="generatePlan()">✨ 今日の計画を自動生成</button>
   </div>
+  <div id="weeklyChart"></div>
+  <div id="examProgressArea"></div>
   <div id="lapProgressArea"></div>
   <div id="coArea"></div>
   <div id="planOutput"></div>
@@ -201,6 +204,11 @@ label{font-size:.77rem;color:var(--text2);white-space:nowrap}
   </div>
   <div class="card">
     <div class="card-title">📖 登録済みの教科書</div>
+    <div style="position:relative;margin-bottom:12px">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:.9rem;pointer-events:none">🔍</span>
+      <input type="text" id="tbSearch" placeholder="名前・科目で検索…" style="padding-left:32px" oninput="renderTextbooks()">
+    </div>
+    <div id="tbSearchCount" style="font-size:.72rem;color:var(--text3);margin-bottom:6px;display:none"></div>
     <div id="textbookList"><div class="empty-state">まだ教科書が登録されていません</div></div>
   </div>
 </div>
@@ -364,9 +372,9 @@ function switchTab(id){
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',ids[i]===id));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+id).classList.add('active');
-  if(id==='today'){renderLapProgress();renderCoArea();}
+  if(id==='today'){renderWeeklyChart();renderLapProgress();renderCoArea();}
   if(id==='settings') renderSettings();
-  if(id==='textbooks'){populateExamSelect('tbExamLink');renderTextbooks();}
+  if(id==='textbooks'){populateExamSelect('tbExamLink');const ts=document.getElementById('tbSearch');if(ts)ts.value='';renderTextbooks();}
   if(id==='workbooks'){populateExamSelect('wbExamLink');populateTbSelect('wbTbLink');renderWorkbooks();}
 }
 
@@ -377,7 +385,7 @@ function addExam(){
   if(!name||!date)return;
   state.exams.push({id:Date.now(),name,date});
   state.exams.sort((a,b)=>a.date.localeCompare(b.date));
-  save();renderSettings();renderExamBanner();
+  save();renderSettings();renderExamBanner();renderLapProgress();
   populateExamSelect('tbExamLink');populateExamSelect('wbExamLink');
   document.getElementById('examName').value='';document.getElementById('examDate').value='';
 }
@@ -385,7 +393,7 @@ function deleteExam(id){
   state.textbooks.forEach(b=>{if(b.examId===id)b.examId=null;});
   state.workbooks.forEach(w=>{if(w.examId===id)w.examId=null;});
   state.exams=state.exams.filter(e=>e.id!==id);
-  save();renderSettings();renderExamBanner();renderTextbooks();renderWorkbooks();
+  save();renderSettings();renderExamBanner();renderTextbooks();renderWorkbooks();renderLapProgress();
   populateExamSelect('tbExamLink');populateExamSelect('wbExamLink');
 }
 function populateExamSelect(selId){
@@ -445,7 +453,15 @@ function bookCardHtml(book, isTb){
   const renderFn=isTb?'renderTextbooks':'renderWorkbooks';
   const histHtml=book.history&&book.history.length
     ?`<div style="margin-top:8px"><div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">学習履歴</div>`
-      +book.history.slice(-8).reverse().map(h=>`<div style="font-size:.75rem;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border)">${h.date}　第${h.from}〜${h.to}章${h.lap>1?` (${h.lap}周目)`:''}</div>`).join('')+'</div>':'';
+      +book.history.slice(-8).reverse().map(h=>{
+        const vs = h.actual&&h.actual!==h.planned
+          ? `<span style="color:${h.actual<h.planned?'var(--easy)':'var(--warn)'}">実${h.actual}分</span>（予定${h.planned}分）`
+          : `${h.planned||h.actual||''}分`;
+        const lapBadge = h.lap>1?`<span style="background:var(--tag-bg);color:var(--accent2);padding:0 4px;border-radius:3px;font-size:.65rem;margin-left:3px">${h.lap}周目</span>`:'';
+        return `<div style="font-size:.75rem;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center">
+          <span>${h.date}</span><span>第${h.from}〜${h.to}章${lapBadge}</span><span style="margin-left:auto">${vs}</span>
+        </div>`;
+      }).join('')+'</div>':'';
 
   const lapSelectOpts=[1,2,3,4,5].map(n=>`<option value="${n}"${(book.targetLaps||1)===n?' selected':''}>${n}周</option>`).join('');
   const tbOpts=isTb?'':('<option value="">（なし）</option>'+state.textbooks.map(b=>`<option value="${b.id}"${book.tbId===b.id?' selected':''}>${b.name}</option>`).join(''));
@@ -536,8 +552,31 @@ function addTextbook(){
 }
 function renderTextbooks(){
   const el=document.getElementById('textbookList');
-  if(!state.textbooks.length){el.innerHTML='<div class="empty-state">まだ教科書が登録されていません</div>';return;}
-  el.innerHTML=state.textbooks.map(tb=>bookCardHtml(tb,true)).join('');
+  const countEl=document.getElementById('tbSearchCount');
+  if(!state.textbooks.length){
+    el.innerHTML='<div class="empty-state">まだ教科書が登録されていません</div>';
+    if(countEl) countEl.style.display='none';
+    return;
+  }
+  const q=(document.getElementById('tbSearch')?.value||'').trim().toLowerCase();
+  const filtered=q
+    ? state.textbooks.filter(tb=>(tb.name+' '+(tb.subject||'')).toLowerCase().includes(q))
+    : state.textbooks;
+  if(countEl){
+    if(q){
+      countEl.style.display='block';
+      countEl.textContent=filtered.length
+        ? `「${q}」で ${filtered.length} 件ヒット`
+        : `「${q}」に一致する教科書はありません`;
+    } else {
+      countEl.style.display='none';
+    }
+  }
+  if(!filtered.length){
+    el.innerHTML='<div class="empty-state" style="padding:20px">一致する教科書が見つかりません</div>';
+    return;
+  }
+  el.innerHTML=filtered.map(tb=>bookCardHtml(tb,true)).join('');
 }
 function populateTbSelect(selId){
   const sel=document.getElementById(selId);if(!sel)return;
@@ -546,8 +585,90 @@ function populateTbSelect(selId){
   sel.value=cur;
 }
 
+// ════ EXAM PROGRESS CARDS ════
+function renderExamProgress(){
+  const el=document.getElementById('examProgressArea');
+  if(!el) return;
+  const upcomingExams=state.exams.filter(e=>daysUntil(e.date)>=0);
+  if(!upcomingExams.length){el.innerHTML='';return;}
+
+  const cards=upcomingExams.map(exam=>{
+    const days=daysUntil(exam.date);
+    const urgency=days<=3?'var(--hard)':days<=7?'var(--med)':'var(--accent)';
+    const urgencyBg=days<=3?'#fdecea':days<=7?'#fdf3e0':'#eee8da';
+    const urgencyBorder=days<=3?'#e8a09a':days<=7?'#e0c070':'var(--border)';
+
+    // collect all books linked to this exam
+    const linkedBooks=[
+      ...state.textbooks.filter(b=>b.examId===exam.id),
+      ...state.workbooks.filter(w=>w.examId===exam.id)
+    ];
+    if(!linkedBooks.length) return '';
+
+    // aggregate chapters
+    let totalPlanned=0, totalDone=0;
+    const bookRows=linkedBooks.map(b=>{
+      const isTb=!!state.textbooks.find(x=>x.id===b.id);
+      const tgt=b.targetLaps||1;
+      const planned=b.totalChaps*tgt;         // 全周込みの総章数
+      const done=((b.currentLap||1)-1)*b.totalChaps+(b.currentChap-1);
+      const pct=Math.round(Math.min(100,done/planned*100));
+      totalPlanned+=planned;
+      totalDone+=Math.min(done,planned);
+      const barColor=isTb?'var(--accent)':'var(--accent2)';
+      const badge=isTb
+        ?'<span class="type-badge-tb" style="font-size:.6rem">教科書</span>'
+        :'<span class="type-badge-wb" style="font-size:.6rem">問題集</span>';
+      return `<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:.75rem;margin-bottom:3px">
+          <span>${badge}${b.subject?b.subject+' / ':''}${b.name}</span>
+          <span style="color:var(--text3);white-space:nowrap;margin-left:8px">${done} / ${planned}章　<strong style="color:${barColor}">${pct}%</strong></span>
+        </div>
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    const totalPct=totalPlanned?Math.round(Math.min(100,totalDone/totalPlanned*100)):0;
+    // chapters remaining until exam
+    const remaining=totalPlanned-totalDone;
+
+    return `<div style="background:${urgencyBg};border:1px solid ${urgencyBorder};border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-size:.78rem;font-weight:700;color:${urgency}">📅 ${exam.name}</span>
+        <span style="font-family:'Lora',serif;font-size:.85rem;font-weight:700;color:${urgency}">${days===0?'本日！':'あと '+days+' 日'}</span>
+      </div>
+      <!-- total progress big display -->
+      <div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="text-align:center">
+          <div style="font-family:'Lora',serif;font-size:1.6rem;font-weight:700;color:${urgency};line-height:1">${totalPct}%</div>
+          <div style="font-size:.65rem;color:var(--text3);margin-top:2px">達成率</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;justify-content:center">
+          <div style="font-size:.75rem;color:var(--text2)">予定　<strong style="font-family:'Lora',serif;color:var(--text)">${totalPlanned}章</strong></div>
+          <div style="font-size:.75rem;color:var(--text2)">完了　<strong style="font-family:'Lora',serif;color:${urgency}">${totalDone}章</strong></div>
+          <div style="font-size:.75rem;color:var(--text2)">残り　<strong style="font-family:'Lora',serif;color:var(--text3)">${remaining}章</strong></div>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;min-width:80px">
+          <div style="width:100%">
+            <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
+              <div style="height:100%;width:${totalPct}%;background:${urgency};border-radius:5px;transition:width .4s"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- per-book breakdown -->
+      ${bookRows}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  el.innerHTML=cards||'';
+}
+
 // ════ LAP PROGRESS (今日タブ) ════
 function renderLapProgress(){
+  renderExamProgress();
   const el=document.getElementById('lapProgressArea');
   const all=[...state.textbooks,...state.workbooks];
   if(!all.length){el.innerHTML='';return;}
@@ -562,7 +683,7 @@ function renderLapProgress(){
       <div class="lap-row-pct">${pct}%</div>
     </div>`;
   });
-  el.innerHTML=`<div class="lap-progress"><div class="lap-progress-title">進捗</div><div class="lap-rows">${rows.join('')}</div></div>`;
+  el.innerHTML=`<div class="lap-progress"><div class="lap-progress-title">冊別進捗</div><div class="lap-rows">${rows.join('')}</div></div>`;
 }
 
 // ════ WORKBOOKS ════
@@ -715,69 +836,105 @@ function generatePlan(){
   const dls={easy:'易しい',med:'普通',hard:'難しい'};
   lastPlanItems=[];
 
-  const renderBookPlanItem=(book,task,isPaired,isTb)=>{
-    const coTag=book.isCo?'<span class="co-tag">⏮ 持ち越し</span>':'';
-    const linked=book.examId?state.exams.find(e=>e.id===book.examId):null;
-    const lapNote=task.lap>1?`　${task.lap}周目`:'';
-    const examNote=linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:'';
-    return `<div class="plan-item${isPaired?' wb-paired':''}${book.isCo?' co-hi':''}">
-      <div class="plan-dot" style="background:${isTb?cols[book.diff]:'var(--accent2)'}"></div>
+  // assign uid and push to lastPlanItems
+  const mkItem=(type,id,name,time,task,uid)=>{
+    const item={type,id,name,time,done:false,uid,task:task||null,actualMins:null};
+    lastPlanItems.push(item);
+    return item;
+  };
+
+  // render a single task card with inline complete controls
+  const renderTaskCard=(item,isPaired,dotColor,typeBadge,titleHtml,subHtml)=>{
+    const uid=item.uid;
+    return `<div class="plan-item${isPaired?' wb-paired':''}" id="pi-${uid}" data-uid="${uid}">
+      <div class="plan-dot" style="background:${dotColor};margin-top:12px"></div>
       <div class="plan-item-left">
-        <div class="plan-item-name">
-          <span class="${isTb?'type-badge-tb':'type-badge-wb'}" style="font-size:.6rem">${isTb?'教科書':'問題集'}</span>
-          <span class="chap-range-tag">第${task.from}〜${task.to}章</span>
-          ${book.subject?book.subject+' — ':''}${book.name}${coTag}
+        <div class="plan-item-name">${typeBadge}${titleHtml}</div>
+        <div class="plan-item-sub" id="sub-${uid}">${subHtml}</div>
+        <!-- inline complete row -->
+        <div class="task-complete-row" id="cr-${uid}">
+          ${item.task?`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+            <span style="font-size:.72rem;color:var(--text3)">実際の時間：</span>
+            <input type="number" id="act-${uid}" placeholder="${item.time}" min="1" max="600"
+              style="width:58px;padding:3px 6px;font-size:.8rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);text-align:center">
+            <span style="font-size:.72rem;color:var(--text3)">分</span>
+            <button class="btn btn-primary btn-sm" onclick="completeTask('${uid}')">✓ 完了</button>
+            <button class="btn btn-ghost btn-sm" onclick="skipTask('${uid}')">持ち越し</button>
+          </div>`:`<div style="display:flex;gap:6px">
+            <button class="btn btn-primary btn-sm" onclick="completeTask('${uid}')">✓ 完了</button>
+            <button class="btn btn-ghost btn-sm" onclick="skipTask('${uid}')">持ち越し</button>
+          </div>`}
         </div>
-        <div class="plan-item-sub">${dls[book.diff]}　${task.chaps}章 / 1章${task.timePerChap}分${lapNote}${examNote}</div>
       </div>
-      <div class="plan-item-time">${task.mins}分</div>
+      <div class="plan-item-time" id="pt-${uid}">${item.time}分</div>
     </div>`;
   };
 
   units.forEach(u=>{
     if(u.type==='tb'){
-      lastPlanItems.push({type:'textbook',id:u.item.id,name:u.item.name,time:u.item.task.mins,done:false,uid:`tb-${u.item.id}`,task:u.item.task});
-      u.paired.forEach(w=>lastPlanItems.push({type:'workbook',id:w.id,name:w.name,time:w.task.mins,done:false,uid:`wb-${w.id}`,task:w.task}));
-      html+=`<div class="set-block">${renderBookPlanItem(u.item,u.item.task,false,true)}${u.paired.map(w=>renderBookPlanItem(w,w.task,true,false)).join('')}</div>`;
-    } else if(u.type==='wb'){
-      lastPlanItems.push({type:'workbook',id:u.item.id,name:u.item.name,time:u.item.task.mins,done:false,uid:`wb-${u.item.id}`,task:u.item.task});
-      html+=`<div class="set-block">${renderBookPlanItem(u.item,u.item.task,false,false)}</div>`;
-    } else {
-      lastPlanItems.push({type:'todo',id:u.item.id,name:u.item.text,time:u.item.time,done:false,uid:`todo-${u.item.id}`});
+      const item=mkItem('textbook',u.item.id,u.item.name,u.item.task.mins,u.item.task,`tb-${u.item.id}`);
       const coTag=u.item.isCo?'<span class="co-tag">⏮ 持ち越し</span>':'';
-      html+=`<div class="set-block"><div class="plan-item${u.item.isCo?' co-hi':''}">
-        <div class="plan-dot" style="background:var(--accent3)"></div>
-        <div class="plan-item-left"><div class="plan-item-name">${u.item.text}${coTag}</div></div>
-        <div class="plan-item-time">${u.item.time}分</div>
-      </div></div>`;
+      const linked=u.item.examId?state.exams.find(e=>e.id===u.item.examId):null;
+      const lapNote=u.item.task.lap>1?`　${u.item.task.lap}周目`:'';
+      const examNote=linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:'';
+      let inner=renderTaskCard(item,false,cols[u.item.diff],
+        `<span class="type-badge-tb" style="font-size:.6rem">教科書</span><span class="chap-range-tag">第${u.item.task.from}〜${u.item.task.to}章</span>`,
+        `${u.item.subject?u.item.subject+' — ':''}${u.item.name}${coTag}`,
+        `${dls[u.item.diff]}　${u.item.task.chaps}章 / 1章${u.item.task.timePerChap}分${lapNote}${examNote}`
+      );
+      u.paired.forEach(w=>{
+        const wi=mkItem('workbook',w.id,w.name,w.task.mins,w.task,`wb-${w.id}`);
+        const wlinked=w.examId?state.exams.find(e=>e.id===w.examId):null;
+        const wExamNote=wlinked?`　📅 ${wlinked.name}（あと${daysUntil(wlinked.date)}日）`:'';
+        const wco=w.isCo?'<span class="co-tag">⏮</span>':'';
+        inner+=renderTaskCard(wi,true,'var(--accent2)',
+          `<span class="type-badge-wb" style="font-size:.6rem">問題集</span><span class="chap-range-tag">第${w.task.from}〜${w.task.to}章</span>`,
+          `${w.subject?w.subject+' — ':''}${w.name}${wco}`,
+          `${dls[w.diff]}　${w.task.chaps}章 / 1章${w.task.timePerChap}分${wExamNote}`
+        );
+      });
+      html+=`<div class="set-block">${inner}</div>`;
+    } else if(u.type==='wb'){
+      const item=mkItem('workbook',u.item.id,u.item.name,u.item.task.mins,u.item.task,`wb-${u.item.id}`);
+      const coTag=u.item.isCo?'<span class="co-tag">⏮ 持ち越し</span>':'';
+      const linked=u.item.examId?state.exams.find(e=>e.id===u.item.examId):null;
+      const examNote=linked?`　📅 ${linked.name}（あと${daysUntil(linked.date)}日）`:'';
+      const lapNote=u.item.task.lap>1?`　${u.item.task.lap}周目`:'';
+      html+=`<div class="set-block">${renderTaskCard(item,false,'var(--accent2)',
+        `<span class="type-badge-wb" style="font-size:.6rem">問題集</span><span class="chap-range-tag">第${u.item.task.from}〜${u.item.task.to}章</span>`,
+        `${u.item.subject?u.item.subject+' — ':''}${u.item.name}${coTag}`,
+        `${dls[u.item.diff]}　${u.item.task.chaps}章 / 1章${u.item.task.timePerChap}分${lapNote}${examNote}`
+      )}</div>`;
+    } else {
+      const item=mkItem('todo',u.item.id,u.item.text,u.item.time,null,`todo-${u.item.id}`);
+      const coTag=u.item.isCo?'<span class="co-tag">⏮ 持ち越し</span>':'';
+      html+=`<div class="set-block">${renderTaskCard(item,false,'var(--accent3)','',`${u.item.text}${coTag}`,'')}</div>`;
     }
   });
 
-  html+=`<div id="confirmArea"><button class="confirm-btn" onclick="showConfirmChecks()">📋 今日の計画を確定して未完了を記録する</button></div>`;
-  out.innerHTML=html;
-}
-
-// ════ CONFIRM ════
-function showConfirmChecks(){
-  document.getElementById('confirmArea').innerHTML=`<div class="co-list-card" style="margin-top:10px">
-    <div class="co-list-title">完了できなかった項目のチェックを外してください</div>
-    ${lastPlanItems.map((item,i)=>`<div class="confirm-check-item">
-      <input type="checkbox" id="ci${i}" checked style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
-      <label for="ci${i}" style="flex:1;cursor:pointer">${item.name}
-        ${item.task?`<span style="font-size:.7rem;color:var(--text3)"> 第${item.task.from}〜${item.task.to}章</span>`:''}
-        <span style="font-size:.7rem;color:var(--text3);margin-left:4px">${item.time}分</span>
-      </label>
-    </div>`).join('')}
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-primary btn-sm" onclick="finalizeConfirm()">記録する</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('confirmArea').innerHTML='<button class=\\'confirm-btn\\' onclick=\\'showConfirmChecks()\\'>📋 今日の計画を確定して未完了を記録する</button>'">キャンセル</button>
+  // progress summary bar (updates as tasks complete)
+  html=`<div id="planSummary" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--text2);margin-bottom:4px">
+      <span id="psLabel">0 / ${lastPlanItems.length} 完了</span>
+      <span id="psTime">0 分 記録済み</span>
     </div>
-  </div>`;
+    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+      <div id="psBar" style="height:100%;background:var(--done);border-radius:3px;width:0%;transition:width .35s"></div>
+    </div>
+  </div>`+html;
+
+  out.innerHTML=html;
+  updatePlanSummary();
 }
 
-function advanceBook(book,task,today){
-  if(!book.history)book.history=[];
-  book.history.push({date:today,from:task.from,to:task.to,lap:book.currentLap||1});
+function advanceBook(book, task, today, actualMins){
+  if(!book.history) book.history=[];
+  const chaps = task.chaps||(task.to-task.from+1);
+  const actualPerChap = actualMins ? Math.round(actualMins/chaps) : null;
+  book.history.push({date:today,from:task.from,to:task.to,lap:book.currentLap||1,
+    planned:task.mins,actual:actualMins||task.mins,actualPerChap});
+  const actuals=book.history.filter(h=>h.actualPerChap).slice(-3).map(h=>h.actualPerChap);
+  if(actuals.length) book.timePerChap=Math.round(actuals.reduce((a,b)=>a+b,0)/actuals.length);
   book.currentChap=task.to+1;
   if(book.currentChap>book.totalChaps){
     if((book.currentLap||1)<(book.targetLaps||1)){book.currentLap=(book.currentLap||1)+1;book.currentChap=1;}
@@ -785,32 +942,258 @@ function advanceBook(book,task,today){
   }
 }
 
-function finalizeConfirm(){
+// ── per-task inline completion ──
+function completeTask(uid){
+  const item=lastPlanItems.find(x=>x.uid===uid);
+  if(!item||item.done) return;
   const today=todayStr();
-  lastPlanItems.forEach((item,i)=>{item.done=!!(document.getElementById('ci'+i)?.checked);});
+  const actEl=document.getElementById('act-'+uid);
+  const actualMins=actEl?(parseInt(actEl.value)||null):null;
+  item.done=true;
+  item.actualMins=actualMins;
 
-  lastPlanItems.filter(item=>item.type==='textbook'&&item.done&&item.task).forEach(item=>{
-    const tb=state.textbooks.find(b=>b.id===item.id);if(tb)advanceBook(tb,item.task,today);
-  });
-  lastPlanItems.filter(item=>item.type==='workbook'&&item.done&&item.task).forEach(item=>{
-    const wb=state.workbooks.find(w=>w.id===item.id);if(wb)advanceBook(wb,item.task,today);
-  });
-  lastPlanItems.filter(item=>!item.done).forEach(item=>{
-    if(!state.carryovers.find(co=>co.uid===item.uid))
-      state.carryovers.push({...item,date:today});
-  });
+  if(item.type==='textbook'&&item.task){
+    const tb=state.textbooks.find(b=>b.id===item.id);
+    if(tb) advanceBook(tb,item.task,today,actualMins);
+  } else if(item.type==='workbook'&&item.task){
+    const wb=state.workbooks.find(w=>w.id===item.id);
+    if(wb) advanceBook(wb,item.task,today,actualMins);
+  }
 
-  save();renderCoArea();renderTextbooks();renderWorkbooks();renderLapProgress();
-  document.getElementById('confirmArea').innerHTML='<p style="font-size:.82rem;color:var(--done);margin-top:6px">✓ 記録しました！章が自動で進みました。</p>';
+  // update daily log
+  if(!state.dailyLog) state.dailyLog=[];
+  const used=lastPlanItems.filter(x=>x.done).reduce((s,x)=>s+(x.actualMins||x.time),0);
+  const existing=state.dailyLog.find(d=>d.date===today);
+  if(existing){existing.mins=used;}else{state.dailyLog.push({date:today,mins:used});}
+  state.dailyLog=state.dailyLog.slice(-60);
+
+  save();
+
+  // visually strike through the card
+  const card=document.getElementById('pi-'+uid);
+  if(card){
+    card.style.opacity='0.55';
+    card.style.borderLeft='3px solid var(--done)';
+    const nameEl=card.querySelector('.plan-item-name');
+    if(nameEl) nameEl.style.textDecoration='line-through';
+    // replace complete row with done stamp + undo button
+    const cr=document.getElementById('cr-'+uid);
+    const displayed=actualMins||item.time;
+    if(cr) cr.innerHTML=`<div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:.75rem;color:var(--done);font-weight:600">✓ 完了　${displayed}分</span>
+      <button class="btn btn-ghost btn-sm" style="font-size:.7rem;padding:3px 8px;color:var(--text3)" onclick="undoTask('${uid}')">↩ 戻す</button>
+    </div>`;
+    const pt=document.getElementById('pt-'+uid);
+    if(pt){pt.textContent=displayed+'分';pt.style.color='var(--done)';}
+  }
+
+  updatePlanSummary();
+  renderWeeklyChart();
+  renderLapProgress();
+  renderTextbooks();
+  renderWorkbooks();
+}
+
+function undoTask(uid){
+  const item=lastPlanItems.find(x=>x.uid===uid);
+  if(!item||item.done!==true) return;
+  const today=todayStr();
+
+  // revert book state: remove last history entry and roll back currentChap
+  if((item.type==='textbook'||item.type==='workbook')&&item.task){
+    const arr=item.type==='textbook'?state.textbooks:state.workbooks;
+    const book=arr.find(b=>b.id===item.id);
+    if(book&&book.history&&book.history.length){
+      // find and remove the entry we just added
+      const idx=book.history.map(h=>h.date+h.from+h.to).lastIndexOf(today+item.task.from+item.task.to);
+      if(idx>=0) book.history.splice(idx,1);
+      // recalculate timePerChap from remaining actuals
+      const actuals=book.history.filter(h=>h.actualPerChap).slice(-3).map(h=>h.actualPerChap);
+      if(actuals.length) book.timePerChap=Math.round(actuals.reduce((a,b)=>a+b,0)/actuals.length);
+      // roll back position
+      book.done=false;
+      book.currentChap=item.task.from;
+      // if we had rolled over a lap, roll back
+      if(item.task.to>=item.task.from&&item.task.to===book.totalChaps&&(book.currentLap||1)>1){
+        // we were at last chap of a lap: currentChap was reset to 1 and lap advanced
+        // detect: if currentChap is now 1 and lap > original lap at time of task
+        // simpler: store original lap in task when completeTask runs — we already have task.lap
+        if(book.currentLap>(item.task.lap||1)){
+          book.currentLap=item.task.lap||1;
+          book.currentChap=item.task.from;
+        }
+      }
+    }
+  }
+
+  // remove from daily log total
+  const used=lastPlanItems.filter(x=>x.uid!==uid&&x.done===true).reduce((s,x)=>s+(x.actualMins||x.time),0);
+  if(!state.dailyLog) state.dailyLog=[];
+  const existing=state.dailyLog.find(d=>d.date===today);
+  if(existing) existing.mins=used;
+
+  item.done=false;
+  item.actualMins=null;
+  save();
+
+  // restore card visuals
+  const card=document.getElementById('pi-'+uid);
+  if(card){
+    card.style.opacity='';
+    card.style.borderLeft='';
+    const nameEl=card.querySelector('.plan-item-name');
+    if(nameEl) nameEl.style.textDecoration='';
+    const pt=document.getElementById('pt-'+uid);
+    if(pt){pt.textContent=item.time+'分';pt.style.color='';}
+    // restore complete row
+    const cr=document.getElementById('cr-'+uid);
+    if(cr){
+      if(item.task){
+        cr.innerHTML=`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span style="font-size:.72rem;color:var(--text3)">実際の時間：</span>
+          <input type="number" id="act-${uid}" placeholder="${item.time}" min="1" max="600"
+            style="width:58px;padding:3px 6px;font-size:.8rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);text-align:center">
+          <span style="font-size:.72rem;color:var(--text3)">分</span>
+          <button class="btn btn-primary btn-sm" onclick="completeTask('${uid}')">✓ 完了</button>
+          <button class="btn btn-ghost btn-sm" onclick="skipTask('${uid}')">持ち越し</button>
+        </div>`;
+      } else {
+        cr.innerHTML=`<div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="completeTask('${uid}')">✓ 完了</button>
+          <button class="btn btn-ghost btn-sm" onclick="skipTask('${uid}')">持ち越し</button>
+        </div>`;
+      }
+    }
+  }
+
+  updatePlanSummary();
+  renderWeeklyChart();
+  renderLapProgress();
+  renderTextbooks();
+  renderWorkbooks();
+}
+
+function skipTask(uid){
+  const item=lastPlanItems.find(x=>x.uid===uid);
+  if(!item||item.done) return;
+  const today=todayStr();
+  if(!state.carryovers.find(co=>co.uid===uid))
+    state.carryovers.push({...item,date:today});
+  save();
+
+  const card=document.getElementById('pi-'+uid);
+  if(card){
+    card.style.opacity='0.45';
+    card.style.borderLeft='3px solid var(--co)';
+    const cr=document.getElementById('cr-'+uid);
+    if(cr) cr.innerHTML=`<div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:.75rem;color:var(--co)">⏮ 持ち越しに追加</span>
+      <button class="btn btn-ghost btn-sm" style="font-size:.7rem;padding:3px 8px;color:var(--text3)" onclick="undoSkip('${uid}')">↩ 戻す</button>
+    </div>`;
+  }
+  item.done='skipped';
+  updatePlanSummary();
+  renderCoArea();
+}
+
+function undoSkip(uid){
+  const item=lastPlanItems.find(x=>x.uid===uid);
+  if(!item||item.done!=='skipped') return;
+  state.carryovers=state.carryovers.filter(co=>co.uid!==uid);
+  item.done=false;
+  save();
+
+  const card=document.getElementById('pi-'+uid);
+  if(card){
+    card.style.opacity='';
+    card.style.borderLeft='';
+    const cr=document.getElementById('cr-'+uid);
+    if(cr){
+      if(item.task){
+        cr.innerHTML=`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span style="font-size:.72rem;color:var(--text3)">実際の時間：</span>
+          <input type="number" id="act-${uid}" placeholder="${item.time}" min="1" max="600"
+            style="width:58px;padding:3px 6px;font-size:.8rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);text-align:center">
+          <span style="font-size:.72rem;color:var(--text3)">分</span>
+          <button class="btn btn-primary btn-sm" onclick="completeTask('${uid}')">✓ 完了</button>
+          <button class="btn btn-ghost btn-sm" onclick="skipTask('${uid}')">持ち越し</button>
+        </div>`;
+      } else {
+        cr.innerHTML=`<div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="completeTask('${uid}')">✓ 完了</button>
+          <button class="btn btn-ghost btn-sm" onclick="skipTask('${uid}')">持ち越し</button>
+        </div>`;
+      }
+    }
+  }
+
+  updatePlanSummary();
+  renderCoArea();
+}
+
+function updatePlanSummary(){
+  const total=lastPlanItems.length;
+  const done=lastPlanItems.filter(x=>x.done===true).length;
+  const mins=lastPlanItems.filter(x=>x.done===true).reduce((s,x)=>s+(x.actualMins||x.time),0);
+  const pct=total?Math.round(done/total*100):0;
+  const lb=document.getElementById('psLabel');
+  const tb=document.getElementById('psTime');
+  const bar=document.getElementById('psBar');
+  if(lb) lb.textContent=`${done} / ${total} 完了`;
+  if(tb) tb.textContent=`${mins} 分 記録済み`;
+  if(bar) bar.style.width=pct+'%';
+}
+
+// ════ WEEKLY BAR CHART ════
+function renderWeeklyChart(){
+  const el=document.getElementById('weeklyChart');
+  if(!el) return;
+  if(!state.dailyLog||!state.dailyLog.length){el.innerHTML='';return;}
+
+  const days=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i); d.setHours(0,0,0,0);
+    const ds=d.toISOString().slice(0,10);
+    const entry=state.dailyLog.find(x=>x.date===ds);
+    days.push({ds,dow:['日','月','火','水','木','金','土'][d.getDay()],mins:entry?entry.mins:0});
+  }
+  const maxMins=Math.max(...days.map(d=>d.mins),30);
+  const today=todayStr();
+  const total7=days.reduce((s,d)=>s+d.mins,0);
+  const avg7=Math.round(total7/7);
+
+  const bars=days.map(d=>{
+    const pct=Math.round(d.mins/maxMins*100);
+    const isToday=d.ds===today;
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:0">
+      <div style="font-size:.62rem;color:var(--text3);min-height:15px;text-align:center;white-space:nowrap">${d.mins?d.mins+'分':''}</div>
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:72px;background:var(--surface2);border-radius:4px;overflow:hidden">
+        <div style="background:${isToday?'var(--accent)':'var(--accent3)'};width:100%;height:${pct}%;min-height:${d.mins?3:0}px;transition:height .4s;border-radius:4px 4px 0 0"></div>
+      </div>
+      <div style="font-size:.74rem;color:${isToday?'var(--accent)':'var(--text2)'};font-weight:${isToday?700:400}">${d.dow}</div>
+      <div style="font-size:.6rem;color:var(--text3)">${d.ds.slice(5).replace('-','/')}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`<div class="card" style="margin-bottom:14px">
+    <div class="card-title" style="margin-bottom:10px">📊 直近7日間の学習時間</div>
+    <div style="display:flex;gap:6px;align-items:flex-end">${bars}</div>
+    <div style="display:flex;gap:16px;margin-top:10px;font-size:.75rem;color:var(--text2);border-top:1px solid var(--border);padding-top:8px">
+      <span>7日合計 <strong style="color:var(--accent);font-family:'Lora',serif">${total7}分</strong></span>
+      <span>1日平均 <strong style="color:var(--accent);font-family:'Lora',serif">${avg7}分</strong></span>
+    </div>
+  </div>`;
 }
 
 // ════ LAP SETTINGS ════
 function saveLapSettings(){state.settings.lapReduction=+document.getElementById('lapReduction').value;save();}
 
 // ════ INIT ════
+if(!state.dailyLog) state.dailyLog=[];
 renderTextbooks();renderWorkbooks();renderTodos();
 renderSettings();renderExamBanner();renderLapProgress();renderCoArea();
 populateExamSelect('tbExamLink');populateExamSelect('wbExamLink');populateTbSelect('wbTbLink');
+renderWeeklyChart();
 </script>
 </body>
 </html>
